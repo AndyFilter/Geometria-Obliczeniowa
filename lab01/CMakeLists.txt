@@ -19,10 +19,13 @@ add_executable(${PROJECT_NAME}
         ../gui/ImGuiExtensions.cpp
         ../structures.h)
 
-find_package(glfw3 3.3 REQUIRED)
-target_link_libraries(${PROJECT_NAME} glfw)
+target_include_directories(${PROJECT_NAME} PUBLIC ../)
+
+#find_package(glfw3 3.3 REQUIRED)
+#target_link_libraries(${PROJECT_NAME} glfw3)
+target_link_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../Dependencies/GLFW/lib-vc2022)
+target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../Dependencies/GLFW/Include)
+target_link_libraries(${PROJECT_NAME} glfw3)
 
 find_package(OpenGL REQUIRED)
 target_link_libraries(${PROJECT_NAME} OpenGL::GL)
-
-target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/Dependencies/GLFW/Include)

@@ -15,6 +15,8 @@ public:
     inline const float dist(const Vec2& other) const { return std::sqrt(powf(x - other.x, 2) + powf(y - other.y, 2)); };
     inline const float dist(const ImVec2& other) const { return std::sqrt(powf(x - other.x, 2) + powf(y - other.y, 2)); };
 
+    inline Vec2 normal() const { float mag = sqrt(x*x + (y*y)); return {x/mag, y/mag}; }
+
     inline const void Clamp(Vec2 mn, Vec2 mx) { x = clamp(x, mn.x, mx.x); y = clamp(y, mn.y, mx.y); };
 
     Vec2 operator=(const Vec2& other) { return { this->x = other.x, this->y = other.y }; }
@@ -35,11 +37,18 @@ public:
 
 struct LineFunc
 {
-    float a{}, b{};
+    float a{}, b{}; // directional
+    float A{}, B{}, C{}; // general
 
-    LineFunc(float a = 0, float b = 0) : a(a), b(b) {};
+    // y = ax + b
+    LineFunc(float a = 0, float b = 0) : a(a), b(b), B(a), A(1), C(b) {};
+
+    // Ax + By + C = 0. (y = - (A/B)x - (C/B))
+    LineFunc(float A, float B, float C) : B(A), A(B), C(C), a(-B / A), b(-C / A) {};
     LineFunc(const Vec2 p1, const Vec2 p2) {
         a = (p2.y - p1.y) / (p2.x - p1.x);
         b = p1.y - (a * p1.x);
     };
+
+    //float eval(float x) {}
 };
