@@ -16,10 +16,11 @@ int OnGui()
 
     if(ImGui::BeginTabBar("Items")) {
 
+#pragma region LAB_01
         if(ImGui::BeginTabItem("Równanie Prostej")) {
 
             static Vec2 P1{7, 0}, P2{2, -5};
-            static LineFunc func(P1, P2);
+            static DirectionalLineFunc func(P1, P2);
             bool isDirty = false;
             // Controls
             if(ImGui::BeginChild("Parameters", {500, -1}, ImGuiChildFlags_Border)) {
@@ -46,12 +47,23 @@ int OnGui()
                 ImGui::Spacing(); ImGui::Spacing(); ImGui::Spacing();
                 ImGui::SeparatorText("Wynik");
 
+                ImGui::Text("Forma kierunkowa prostej");
+                ImGui::Indent(4);
                 ImGui::Text("y = %.2fx + %.2f", func.a, func.b);
+                ImGui::Unindent(4);
+
+                ImGui::Spacing();
+
+                LineFunc constructed_func(P1.x - P2.x, P2.y - P1.y, P1.y * (P2.x - P1.x) - (P2.y - P1.y) * P1.x);
+                ImGui::Text("Forma ogólna prostej");
+                ImGui::Indent(4);
+                ImGui::Text("%.2fx + %.2fy + %.2f = 0", constructed_func.A, constructed_func.B, constructed_func.C);
+                ImGui::Unindent(4);
             }
             ImGui::EndChild();
 
             if(isDirty) {
-                func = LineFunc(P1, P2);
+                func = DirectionalLineFunc(P1, P2);
             }
 
             // Canvas
@@ -76,21 +88,23 @@ int OnGui()
                 Vec2 dir_vec = pos1 - pos2;
                 Vec2 mid_point = (pos1 + pos2)/2;// startPos + (avail/2);
 
-                dl->AddLine(pos1, pos2, ImGui::GetColorU32(ImGuiCol_Button), 2);
-                dl->AddLine((dir_vec * -10000) + mid_point, (dir_vec * 10000) + mid_point, ImGui::GetColorU32(ImGuiCol_FrameBg), 1);
+                dl->AddLine(pos1, pos2, LINE_BASE_COLOR, 2);
+                dl->AddLine((dir_vec * -10000) + mid_point, (dir_vec * 10000) + mid_point, ImGui::GetColorU32(ImGuiCol_TextSelectedBg), 1);
 
                 ImGui::DrawPoint(pos1, "P1", dl);
                 ImGui::DrawPoint(pos2, "P2", dl);
             }
             ImGui::EndChild();
 
-
             ImGui::EndTabItem();
         }
 
         if(ImGui::BeginTabItem("Punkt na prostej")) {
             static Vec2 P1{6, 4};
-            static LineFunc func(0.5, 1);
+            static GeneralLineFunc func(2, 1, 3);
+
+            // dist = |A * P1.x + B * P1.y + C| / sqrt(A^2+B^2)
+            float dist = fabsf(func.A * P1.x + (func.B * P1.y) + func.C) / sqrtf(func.A * func.A + func.B * func.B);
 
             // Controls
             if(ImGui::BeginChild("Parameters", {500, -1}, ImGuiChildFlags_Border)) {
@@ -106,21 +120,13 @@ int OnGui()
                 ImGui::SliderFloat2("##P1", &P1.x, -10, 10,"%.2f");
                 ImGui::Unindent(4);
 
-                ImGui::Text("y ="); ImGui::SameLine();
-                ImGui::SetNextItemWidth(80);
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {2, 2});
-                ImGui::DragFloat("##LineFunc_a_001", &func.a, 0.05, -10, 10, "%.2fx");
-                ImGui::SameLine();
-                ImGui::Text("+");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(50);
-                ImGui::DragFloat("##LineFunc_b_001", &func.b, 0.05, -10, 10, "%.2f");
-                ImGui::PopStyleVar();
+                ImGui::Text("Forma ogólna prostej:");
+                ImGui::GeneralLineParams(func);
 
                 ImGui::Spacing(); ImGui::Spacing(); ImGui::Spacing();
                 ImGui::SeparatorText("Wynik");
 
-                ImGui::Text("Dystans punktu od prostej = %.2f", P1.x * func.a + func.b - P1.y);
+                ImGui::Text("Dystans punktu od prostej = %.2f", dist);
             }
             ImGui::EndChild();
 
@@ -139,14 +145,13 @@ int OnGui()
                 Vec2 pos1 = Vec2(1, -1) * (P1 / 20) * avail + startPos + (avail/2);
                 // Change the point's color based on whether it is on the line or not
                 ImGui::DrawPoint(pos1, "P1", dl, 8,
-                                 fabs(P1.x * func.a + func.b - P1.y) < FLOAT_VALUE_THRESHOLD ?
+                                 dist < FLOAT_VALUE_THRESHOLD ?
                                  ImGui::GetColorU32(ImGuiCol_PlotHistogram) :
                                  ImGui::GetColorU32(ImGuiCol_Button));
 
-                Vec2 canvas_center = startPos + (avail/2) + Vec2(0, -func.b / 20 * avail.y);
-                // y = ax + b
-                Vec2 dir(1,  -func.a * avail.y / avail.x);
-                dl->AddLine((dir * -1000) + canvas_center, (dir * 1000) + canvas_center, ImGui::GetColorU32(ImGuiCol_Button));
+                Vec2 canvas_center = startPos + (avail/2) + ImGui::GetGeneralFuncOffset(func) * avail;
+                Vec2 dir = Vec2(func.B, func.A * avail.y / avail.x) * 100000.f;
+                dl->AddLine(dir + canvas_center, canvas_center - dir, LINE_BASE_COLOR, 2);
             }
             ImGui::EndChild();
 
@@ -154,10 +159,29 @@ int OnGui()
         }
 
 
-        if(ImGui::BeginTabItem("Punkt na linii")) {
+        if(ImGui::BeginTabItem("Punkt na odcinku")) {
             static Vec2 P1{-3.5, 4};
-            static Vec2 A {-3, -2}, B{5, 9}; // Points making up the line
+            static Vec2 A{-3, -2}, B{5, 9}; // Points making up the line
 
+            //LineFunc constructed_func(A.x - B.x, B.y - A.y, A.y * (B.x - A.x) - (B.y - A.y) * A.x);
+            // dist = |A * P1.x + B * P1.y + C| / sqrt(A^2+B^2)
+            //float func_dist = fabsf(constructed_func.A * P1.x + (constructed_func.B * P1.y) + constructed_func.C) / \
+                    sqrtf(constructed_func.A * constructed_func.A + constructed_func.B * constructed_func.B);
+            Vec2 mid_point = Vec2((A.x + B.x), (A.y + B.y)) / 2;
+            float mid_dist = mid_point.dist(P1);
+            float point_dist = fmin(P1.dist(A), P1.dist(B));
+
+            float len = (A - B).mag();
+
+            float dist = fabsf((B.x - A.x) * (A.y - P1.y) - (A.x - P1.x) * (B.y - A.y)) / A.dist(B);
+            if(P1.x < fmin(A.x, B.x) || P1.y < fmin(A.y, B.y) ||
+            P1.x > fmax(A.x, B.x) || P1.y > fmax(A.y, B.y)) {
+                if(len < fmax(P1.dist(A), P1.dist(B)))
+                    dist = point_dist;
+
+                if(mid_dist < point_dist)
+                    dist = fmin(mid_dist, dist);
+            }
             // Controls
             if(ImGui::BeginChild("Parameters", {500, -1}, ImGuiChildFlags_Border)) {
 
@@ -189,7 +213,7 @@ int OnGui()
                 ImGui::SeparatorText("Wynik");
 
                 // wsp. kierunkowy (a.y - b.y) / (a.x - b.x)
-                ImGui::Text("Dystans punktu od linii: %.2f", (P1.y - A.y) / (P1.x - A.x) - (P1.y - B.y) / (P1.x - B.x));
+                ImGui::Text("Dystans punktu od linii: %.2f", dist);
             }
             ImGui::EndChild();
 
@@ -205,7 +229,7 @@ int OnGui()
                 avail += Vec2(-20, -20);
                 startPos += Vec2(10, 10);
 
-                ImColor col = fabs((P1.y - A.y) / (P1.x - A.x) - (P1.y - B.y) / (P1.x - B.x)) < FLOAT_VALUE_THRESHOLD ?
+                ImColor col = dist < FLOAT_VALUE_THRESHOLD ?
                         ImGui::GetColorU32(ImGuiCol_PlotHistogram) :
                         ImGui::GetColorU32(ImGuiCol_Button);
 
@@ -213,7 +237,7 @@ int OnGui()
 
                 Vec2 posA = Vec2(1, -1) * (A / 20) * avail + startPos + (avail/2);
                 Vec2 posB = Vec2(1, -1) * (B / 20) * avail + startPos + (avail/2);
-                dl->AddLine(posA, posB, ImGui::GetColorU32(ImGuiCol_Button), 2);
+                dl->AddLine(posA, posB, LINE_BASE_COLOR, 2);
 
                 ImGui::DrawPoint(pos1, "P1", dl, 8, col);
 
@@ -226,9 +250,9 @@ int OnGui()
         }
 
 
-        if(ImGui::BeginTabItem("Punkt wzgledem linii")) {
+        if(ImGui::BeginTabItem("Punkt względom linii")) {
             static Vec2 P1{-3.5, 4};
-            static LineFunc func(0.5, 1);
+            static DirectionalLineFunc func(0.5, 1);
 
             // Controls
             if(ImGui::BeginChild("Parameters", {500, -1}, ImGuiChildFlags_Border)) {
@@ -245,21 +269,12 @@ int OnGui()
 
                 ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
-                ImGui::Text("y ="); ImGui::SameLine();
-                ImGui::SetNextItemWidth(80);
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {2, 2});
-                ImGui::DragFloat("##LineFunc_a_001", &func.a, 0.05, -10, 10, "%.2fx");
-                ImGui::SameLine();
-                ImGui::Text("+");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(50);
-                ImGui::DragFloat("##LineFunc_b_001", &func.b, 0.05, -10, 10, "%.2f");
-                ImGui::PopStyleVar();
+                ImGui::DirectionalLineParams(func);
 
                 ImGui::Spacing(); ImGui::Spacing(); ImGui::Spacing();
                 ImGui::SeparatorText("Wynik");
 
-                ImGui::Text("Dystans punktu od linii: %s", func.a * P1.x - P1.y + func.b < 0 ? "Prawej" : "Lewej");
+                ImGui::Text("Dystans punktu od linii: %s", func.a * P1.x - P1.y + func.b > 0 ? "Prawej" : "Lewej");
             }
             ImGui::EndChild();
 
@@ -279,7 +294,7 @@ int OnGui()
 
                 Vec2 canvas_center = startPos + (avail/2) + Vec2(0, -func.b / 20 * avail.y);
                 Vec2 dir(1,  -func.a * avail.y / avail.x);
-                dl->AddLine((dir * -1000) + canvas_center, (dir * 1000) + canvas_center, ImGui::GetColorU32(ImGuiCol_Button));
+                dl->AddLine((dir * -1000) + canvas_center, (dir * 1000) + canvas_center, LINE_BASE_COLOR);
 
                 ImGui::DrawPoint(pos1, "P1", dl, 8, ImGui::GetColorU32(ImGuiCol_Button));
             }
@@ -291,7 +306,7 @@ int OnGui()
 
         if(ImGui::BeginTabItem("translacja linii o wektor")) {
             static Vec2 vec{5, 3};
-            static LineFunc func(1, 2, 0);
+            static GeneralLineFunc func(1, 2, 0);
             //static LineFunc func(0.5, 1);
 
             // Controls
@@ -308,29 +323,12 @@ int OnGui()
                 ImGui::Unindent(4);
 
                 ImGui::Text("Forma ogólna funkcji:");
-                ImGui::Indent(4);
-                ImGui::SetNextItemWidth(80);
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {2, 2});
-                ImGui::DragFloat("##LineFunc_A_001", &func.A, 0.05, -10, 10, "%.2fx");
-                ImGui::Unindent(4);
-                ImGui::SameLine();
-                ImGui::Text("+");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(80);
-                ImGui::DragFloat("##LineFunc_B_001", &func.B, 0.05, -10, 10, "%.2fy");
-                ImGui::SameLine();
-                ImGui::Text("+");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(50);
-                ImGui::DragFloat("##LineFunc_C_001", &func.C, 0.05, -10, 10, "%.2f");
-                ImGui::SameLine();
-                ImGui::Text("= 0");
-                ImGui::PopStyleVar();
+                ImGui::GeneralLineParams(func);
 
                 ImGui::Spacing(); ImGui::Spacing(); ImGui::Spacing();
                 ImGui::SeparatorText("Wynik");
 
-                ImGui::Text("Przesuniecie: [%.2f, %.2f]", vec.x, vec.y);
+                ImGui::Text("Przesunięcie: [%.2f, %.2f]", vec.x, vec.y);
             }
             ImGui::EndChild();
 
@@ -346,16 +344,15 @@ int OnGui()
                 avail += Vec2(-20, -20);
                 startPos += Vec2(10, 10);
 
-                Vec2 free_offset = fabsf(func.B) < FLOAT_VALUE_THRESHOLD ? Vec2(-func.C / func.A / 20 * avail.x, 0) : Vec2(0, func.C / func.B / 20 * avail.y);
-                Vec2 canvas_center = startPos + (avail/2) + free_offset;
+                Vec2 canvas_center = startPos + (avail/2) + ImGui::GetGeneralFuncOffset(func) * avail;
                 Vec2 dir = Vec2(func.B, func.A * avail.y / avail.x) * 100000.f;
-                dl->AddLine(dir + canvas_center, canvas_center - dir, ImGui::GetColorU32(ImGuiCol_Button), 2);
+                dl->AddLine(dir + canvas_center, canvas_center - dir, LINE_BASE_COLOR, 2);
 
                 // Translated line
                 Vec2 shift_vec = Vec2(vec.x / 20 * avail.x, - vec.y / 20 * avail.y);
                 dl->AddLine(dir + canvas_center + shift_vec, canvas_center - dir + shift_vec, ImGui::GetColorU32(ImGuiCol_PlotHistogram), 3);
 
-                ImGui::DrawArrow(dl, startPos + (avail/2), startPos + (avail/2) + shift_vec, ImGui::GetColorU32(ImGuiCol_Button), 1);
+                ImGui::DrawArrow(dl, startPos + (avail/2), startPos + (avail/2) + shift_vec, LINE_BASE_COLOR, 1);
                 //dl->AddLine(startPos + (avail/2), startPos + (avail/2) + shift_vec, ImGui::GetColorU32(ImGuiCol_Button), 1);
             }
             ImGui::EndChild();
@@ -366,8 +363,12 @@ int OnGui()
 
         if(ImGui::BeginTabItem("Odbicie punktu od linii")) {
             static Vec2 P1{6, 4};
-            static LineFunc func(1, 3, 0);
-            static Vec2 offset {0,0};
+            static GeneralLineFunc func(1, 3, 0);
+
+            // Calculate the reflected point
+            Vec2 reflected_pos = { (func.B * func.B - (func.A * func.A)) * P1.x - 2*(func.A * func.B * P1.y) - 2 * func.A * func.C,
+                                   (func.A * func.A - (func.B * func.B)) * P1.y - 2*(func.A * func.B * P1.x) - 2 * func.B * func.C};
+            reflected_pos = reflected_pos * 1/(func.A * func.A + (func.B * func.B));
 
             // Controls
             if(ImGui::BeginChild("Parameters", {500, -1}, ImGuiChildFlags_Border)) {
@@ -384,30 +385,12 @@ int OnGui()
                 ImGui::Unindent(4);
 
                 ImGui::Text("Forma ogólna funkcji:");
-                ImGui::Indent(4);
-                ImGui::SetNextItemWidth(80);
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {2, 2});
-                ImGui::DragFloat("##LineFunc_A_001", &func.A, 0.05, -10, 10, "%.2fx");
-                ImGui::Unindent(4);
-                ImGui::SameLine();
-                ImGui::Text("+");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(80);
-                ImGui::DragFloat("##LineFunc_B_001", &func.B, 0.05, -10, 10, "%.2fy");
-                ImGui::SameLine();
-                ImGui::Text("+");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(50);
-                ImGui::DragFloat("##LineFunc_C_001", &func.C, 0.05, -10, 10, "%.2f");
-                ImGui::SameLine();
-                ImGui::Text("= 0");
-                ImGui::PopStyleVar();
-
-                ImGui::SetNextItemWidth(avail.x);
-                ImGui::SliderFloat2("##P2", &offset.x, -10, 10,"%.2f");
+                ImGui::GeneralLineParams(func);
 
                 ImGui::Spacing(); ImGui::Spacing(); ImGui::Spacing();
                 ImGui::SeparatorText("Wynik");
+
+                ImGui::Text("Pozycja odbitego punktu: [%.2f, %.2f]", reflected_pos.x, reflected_pos.y);
             }
             ImGui::EndChild();
 
@@ -426,26 +409,76 @@ int OnGui()
                 Vec2 pos1 = Vec2(1, -1) * (P1 / 20) * avail + startPos + (avail/2);
                 ImGui::DrawPoint(pos1, "P", dl, 8, ImGui::GetColorU32(ImGuiCol_Button));
 
-                // OLD METHOD. Works only for A and B != 0
-                //float a = - (func.A / func.B);
-                //float b = - (func.C/ func.B);
-                //float intersection_x_num = P1.y + (P1.x / a) - b;
-                //float intersection_x_denom = a + 1/a;
-
-                Vec2 reflected_pos = { (func.B * func.B - (func.A * func.A)) * P1.x - 2*(func.A * func.B * P1.y) - 2 * func.A * func.C,
-                                       (func.A * func.A - (func.B * func.B)) * P1.y - 2*(func.A * func.B * P1.x) - 2 * func.B * func.C};
-                reflected_pos = reflected_pos * 1/(func.A * func.A + (func.B * func.B));
-
                 Vec2 pos2 = Vec2(1, -1) * (reflected_pos / 20) * avail + startPos + (avail/2);
                 ImGui::DrawPoint(pos2,"P'", dl, 8, ImGui::GetColorU32(ImGuiCol_PlotHistogram));
 
-                Vec2 free_offset = Vec2(func.A == 0 ? 0 : (-func.C / func.A), func.B == 0 ? 0 : (func.C / func.B)) / 40 * avail.x;//offset / 20 * avail;//fabsf(func.B) < FLOAT_VALUE_THRESHOLD ? Vec2(-func.C / func.A / 20 * avail.x, 0) : Vec2(0, func.C / func.B / 20 * avail.y);
-                Vec2 canvas_center = startPos + (avail/2) + free_offset;
-                //ImGui::Text("Func Shift: [%f, %f]", free_offset.x / avail.x * 20, free_offset.y / avail.y * 20);
+                // Draw a function from the general form
+                Vec2 canvas_center = startPos + (avail/2) + ImGui::GetGeneralFuncOffset(func) * avail;
                 Vec2 dir = Vec2(func.B, func.A * avail.y / avail.x) * 100000.f;
-                dl->AddLine(dir + canvas_center, canvas_center - dir, ImGui::GetColorU32(ImGuiCol_Button), 2);
+                dl->AddLine(dir + canvas_center, canvas_center - dir, LINE_BASE_COLOR, 2);
             }
             ImGui::EndChild();
+
+            ImGui::EndTabItem();
+        }
+
+#pragma endregion LAB_01
+
+        if(ImGui::BeginTabItem(u8"Punkt przecięcia"))
+        {
+            static GeneralLineFunc func1(2, 0.5, 1);
+            static GeneralLineFunc func2(0.25, 1, 1);
+
+            static bool dirty = true;
+            static Vec2 P1;
+
+            // Controls
+            if(ImGui::BeginChild("Parameters", {500, -1}, ImGuiChildFlags_Border)) {
+
+                ImGui::SeparatorText("Parametry");
+
+                ImGui::Text("Forma ogólna funkcji 1:");
+                dirty |= ImGui::GeneralLineParams(func1);
+
+                ImGui::Text("Forma ogólna funkcji 2:");
+                dirty |= ImGui::GeneralLineParams(func2, 1);
+
+                ImGui::Spacing(); ImGui::Spacing(); ImGui::Spacing();
+                ImGui::SeparatorText("Wynik");
+
+                ImGui::Text("Współrzędne punktu styku: [%f, %f]", P1.x, P1.y);
+            }
+            ImGui::EndChild();
+
+            if(dirty) {
+                P1 = func1.GetCollisionPoint(func2);
+            }
+
+            ImGui::SameLine();
+
+            if(ImGui::BeginChild("Canvas", {-1, -1}, ImGuiChildFlags_Border)) {
+                auto dl = ImGui::GetWindowDrawList();
+                Vec2 avail = (Vec2)ImGui::GetContentRegionAvail() + (Vec2)style.WindowPadding * 2;
+                auto startPos = (Vec2)ImGui::GetWindowPos();
+
+                ImGui::DrawCanvas(dl, startPos, avail);
+
+                avail += Vec2(-20, -20);
+                startPos += Vec2(10, 10);
+
+                Vec2 canvas_center = startPos + (avail/2) + ImGui::GetGeneralFuncOffset(func1) * avail;
+                Vec2 dir = Vec2(func1.B, func1.A * avail.y / avail.x) * 100000.f;
+                dl->AddLine(dir + canvas_center, canvas_center - dir, LINE_BASE_COLOR, 2);
+
+                canvas_center = startPos + (avail/2) + ImGui::GetGeneralFuncOffset(func2) * avail;
+                dir = Vec2(func2.B, func2.A * avail.y / avail.x) * 100000.f;
+                dl->AddLine(dir + canvas_center, canvas_center - dir, LINE_BASE_COLOR, 2);
+
+                Vec2 pos1 = Vec2(1, -1) * (P1 / 20) * avail + startPos + (avail/2);
+                ImGui::DrawPoint(pos1, "", dl,POINT_BASE_RADIUS, LINE_SPECIAL_COLOR);
+            }
+            ImGui::EndChild();
+
 
             ImGui::EndTabItem();
         }
