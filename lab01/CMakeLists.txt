@@ -14,7 +14,9 @@ add_executable(${PROJECT_NAME}
         ../External/ImGui/imgui_widgets.cpp
         ../External/ImGui/imgui_impl_glfw.cpp
         ../gui/gui.cpp
-        ../gui/ImGuiExtensions.cpp)
+        ../gui/ImGuiExtensions.cpp
+        ../Helpers.cpp
+        ../Helpers.h)
 
 target_include_directories(${PROJECT_NAME} PUBLIC ../)
 

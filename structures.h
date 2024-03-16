@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cmath>
+#include "External/ImGui/imgui.h"
+
 
 #define clamp(v,mn,mx)  ((v < mn) ? mn : (v > mx) ? mx : v)
 
@@ -41,10 +43,14 @@ struct GeneralLineFunc
     float A{}, B{}, C{}; // general
 
     // Ax + By + C = 0. (y = - (A/B)x - (C/B))
-    GeneralLineFunc(float A, float B, float C) : B(A), A(B), C(C) {};
+    GeneralLineFunc(float A, float B, float C) : A(A), B(B), C(C) {};
+    GeneralLineFunc(const Vec2 P1, const Vec2 P2) :
+    A(P2.y - P1.y),
+    B(P1.x - P2.x),
+    C(P1.y * (P2.x - P1.x) - (P2.y - P1.y) * P1.x) {};
 
     Vec2 GetCollisionPoint(GeneralLineFunc& other) { float denominator = B*other.A - A*other.B;
-        return Vec2((B*other.C - C*other.B) / denominator, (C*other.A - A*other.C) / denominator); }
+        return Vec2(( C*other.B - B*other.C) / denominator, ( A*other.C - C*other.A) / denominator); }
 };
 
 struct DirectionalLineFunc
@@ -57,6 +63,17 @@ struct DirectionalLineFunc
         a = (p2.y - p1.y) / (p2.x - p1.x);
         b = p1.y - (a * p1.x);
     };
+};
+
+struct Triangle
+{
+    Vec2 vtx[3] {0};
+
+    Triangle(GeneralLineFunc f1, GeneralLineFunc f2, GeneralLineFunc f3) {
+        vtx[0] = f1.GetCollisionPoint(f2);
+        vtx[1] = f1.GetCollisionPoint(f3);
+        vtx[2] = f2.GetCollisionPoint(f3);
+    }
 };
 
 struct LineFunc
