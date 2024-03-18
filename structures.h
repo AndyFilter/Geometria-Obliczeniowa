@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <cfenv>
 #include "External/ImGui/imgui.h"
 
 
@@ -68,11 +69,17 @@ struct DirectionalLineFunc
 struct Triangle
 {
     Vec2 vtx[3] {0};
+    bool is_valid = false;
 
     Triangle(GeneralLineFunc f1, GeneralLineFunc f2, GeneralLineFunc f3) {
+        feclearexcept(FE_ALL_EXCEPT);
+
         vtx[0] = f1.GetCollisionPoint(f2);
         vtx[1] = f1.GetCollisionPoint(f3);
         vtx[2] = f2.GetCollisionPoint(f3);
+
+        // If there was a FE_DIVBYZERO (or FE_INVALID) exception the lines don't create a triangle
+        is_valid = !fetestexcept(FE_DIVBYZERO);
     }
 };
 

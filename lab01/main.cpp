@@ -793,15 +793,18 @@ int OnGui()
                 dir = ImGui::GetGeneralLineDir(func3, avail) * 100000.f;
                 dl->AddLine(funcOffset + dir, funcOffset - dir, LINE_BASE_COLOR, LINE_BASE_THICKNESS);
 
-                for(const auto & i : tri.vtx) {
-                    ImGui::DrawPoint(ImGui::Local2Canvas(i, avail, startPos), "", dl);
-                }
+                if(tri.is_valid) {
 
-                // Use a second loop for lines to avoid Z clipping
-                for (int i = 0; i < 3; i++) {
-                    dl->AddLine(ImGui::Local2Canvas(tri.vtx[i], avail, startPos),
-                                ImGui::Local2Canvas(tri.vtx[(i+1)%3], avail, startPos),
-                                LINE_SPECIAL_COLOR, LINE_BASE_THICKNESS);
+                    for (const auto &i: tri.vtx) {
+                        ImGui::DrawPoint(ImGui::Local2Canvas(i, avail, startPos), "", dl);
+                    }
+
+                    // Use a second loop for lines to avoid Z clipping
+                    for (int i = 0; i < 3; i++) {
+                        dl->AddLine(ImGui::Local2Canvas(tri.vtx[i], avail, startPos),
+                                    ImGui::Local2Canvas(tri.vtx[(i + 1) % 3], avail, startPos),
+                                    LINE_SPECIAL_COLOR, LINE_BASE_THICKNESS);
+                    }
                 }
             }
             ImGui::EndChild();

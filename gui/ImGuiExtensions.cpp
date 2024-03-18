@@ -8,6 +8,7 @@ bool ImGui::DrawPoint(Vec2 pos, const char *label, ImDrawList* dl, float radius,
     dl->AddCircleFilled(pos, radius, col);
 
     if(IsMouseHoveringRect(pos - Vec2(radius,radius), pos + Vec2(radius,radius))) {
+        SetMouseCursor(ImGuiMouseCursor_Hand);
         return true;
     }
 
