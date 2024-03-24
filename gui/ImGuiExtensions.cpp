@@ -80,14 +80,18 @@ bool ImGui::GeneralLineParams(GeneralLineFunc &func, int idx) {
     return changed;
 }
 
-bool ImGui::PointParams(Vec2 &P1, int idx) {
+bool ImGui::PointParams(Vec2 &P1, int idx, float w) {
     bool changed = false;
+
+    // - 4 to account for the future indent
+    float width = (w == -1 ? GetContentRegionAvail().x : w) - 4;
 
     PushID(idx);
 
     Indent(4);
     //ImGui::DragFloat2("##P1", &P1.x, 0.05, -10, 10);
-    SetNextItemWidth(GetContentRegionAvail().x);
+    if(w != 0)
+        SetNextItemWidth(width);
     changed = SliderFloat2("##P1", &P1.x, -10, 10,"%.2f");
     Unindent(4);
 
@@ -152,4 +156,59 @@ void ImGui::DrawDistanceLine(Vec2 p1, Vec2 p2, ImDrawList *dl, float distance_if
     if(ang < 0)
         ang = M_PIf + ang;
     ImRotateEnd(ang);
+}
+
+bool ImGui::PolygonParameters(Polygon& poly, int idx) {
+    bool dirty = false;
+
+    PushStyleColor(ImGuiCol_ChildBg, (ImVec4)ImColor(255, 255, 255, 4));
+    if(BeginChild("PolyParams", {-1, 0},ImGuiChildFlags_Border | ImGuiChildFlags_AutoResizeY,
+                  ImGuiWindowFlags_NoSavedSettings)) {
+
+        Vec2 slider_avail = GetContentRegionAvail();
+        float frame_size = GetFrameHeight();
+        slider_avail.x -= frame_size + GetStyle().ItemSpacing.x;
+
+        //if(BeginMenuBar()) {
+        //    if(BeginMenu("Parametry Wielokąta")) {
+        //        ImGui::EndMenu();
+        //    }
+        //    ImGui::EndMenuBar();
+        //}
+
+        SeparatorText("Wielokąt");
+
+        for (int i = 0; i < poly.vtx.size(); i++) {
+            Text("Punkt P%i", i + 1);
+            dirty |= PointParams(poly.vtx[i], (idx + 1) * (i + 1), slider_avail.x);
+
+            SameLine();
+
+            PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor::HSV(DELETE_BUTTON_HUE, 0.63, 0.54));
+            PushStyleColor(ImGuiCol_ButtonHovered, (ImVec4)ImColor::HSV(DELETE_BUTTON_HUE, 0.7f, 0.7f));
+            PushStyleColor(ImGuiCol_ButtonActive, (ImVec4)ImColor::HSV(DELETE_BUTTON_HUE, 0.8f, 0.8f));
+
+            PushID(i);
+            if(Button("X", {frame_size, frame_size})){
+                poly.vtx.erase(poly.vtx.begin() + i);
+                i--;
+            }
+            PopID();
+
+            PopStyleColor(3);
+        }
+
+        //Spacing();Spacing();Spacing();
+        Dummy({0, GetStyle().ItemSpacing.y});
+
+        if(Button("+", {-1, 0})){
+            poly.AddVertex();
+        }
+        if(IsItemHovered())
+            SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+    PopStyleColor();
+    EndChild();
+
+    return dirty;
 }

@@ -12,17 +12,24 @@
 #define POINT_SPECIAL_COLOR LINE_SPECIAL_COLOR
 #define POINT_BASE_RADIUS 8
 
+#define SHAPE_FILL_COLOR (LINE_BASE_COLOR - 0xCC000000)
+
+#define DELETE_BUTTON_HUE 0.988f //0xFFD33F49
+
 #define CANVAS_SIZE 10.f
 
 namespace ImGui {
     bool DrawPoint(Vec2 pos, const char* label, ImDrawList* dl, float radius = POINT_BASE_RADIUS, ImU32 col = LINE_BASE_COLOR);
     void DrawCanvas(ImDrawList* dl, Vec2 pos, Vec2 size = {0,0});
     void DrawArrow(ImDrawList* dl, Vec2 start, Vec2 end, ImU32 col = LINE_BASE_COLOR, float thickness = 2);
-    bool DirectionalLineParams(DirectionalLineFunc& func);
-    bool GeneralLineParams(GeneralLineFunc& func, int idx = 0);
-    bool PointParams(Vec2 &P1, int idx = 0);
     void DrawDistanceLine(Vec2 p1, Vec2 p2, ImDrawList* dl, float distance_if_known = FLT_MAX, ImU32 col = LINE_BASE_COLOR,
                           float thickness = 1);
+
+    // User Configured Parameters
+    bool DirectionalLineParams(DirectionalLineFunc& func);
+    bool GeneralLineParams(GeneralLineFunc& func, int idx = 0);
+    bool PointParams(Vec2 &P1, int idx = 0, float width = -1);
+    bool PolygonParameters(Polygon& poly, int idx = 0);
 
     // Helpers
     inline Vec2 GetGeneralFuncOffset(GeneralLineFunc& func) {

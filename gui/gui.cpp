@@ -151,7 +151,7 @@ int GUI::Setup(int (*OnGui)())
 #endif
 
     // Create window with graphics context
-    window = glfwCreateWindow(1280, 720, "Geometria Obliczeniowa (Lab 1 & 2)", nullptr, nullptr);
+    window = glfwCreateWindow(1280, 720, "Geometria Obliczeniowa", nullptr, nullptr);
     if (window == nullptr)
         return 1;
     glfwMakeContextCurrent(window);
