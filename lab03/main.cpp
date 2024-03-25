@@ -356,7 +356,7 @@ int OnGui()
                 }
 
                 if(ImGui::DrawPoint(ImGui::Local2Canvas(P1, avail, startPos),
-                                    "A", dl, POINT_BASE_RADIUS, POINT_SPECIAL_COLOR) &&
+                                    "A", dl, POINT_BASE_RADIUS, POINT_SPECIAL_COLOR - (is_inside ? 0 : 0x88000000)) &&
                    ImGui::IsMouseClicked(0))
                     dragging_point = &P1;
 

@@ -123,7 +123,7 @@ struct Polygon
                 //printf("intersect at [%.2f, %.2f]", intersect.x, intersect.y);
 
                 // Left side
-                if(intersect.x < p.x)
+                if(intersect.x <= p.x)
                 {
                     //printf(" (LEFT)\n");
                     if(fminf(point.y, lastPoint.y) < p.y && fmaxf(point.y, lastPoint.y)  >= p.y)
