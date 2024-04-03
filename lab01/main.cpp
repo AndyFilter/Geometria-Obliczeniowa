@@ -4,7 +4,6 @@
 #include "../External/ImGui/imgui_internal.h"
 #include "../gui/ImGuiExtensions.h"
 #include "../structures.h"
-#include "definitions.h"
 #include "../Helpers.h"
 
 #define FLOAT_VALUE_THRESHOLD 0.05
@@ -324,7 +323,7 @@ int OnGui()
                 ImGui::Spacing(); ImGui::Spacing(); ImGui::Spacing();
                 ImGui::SeparatorText("Wynik");
 
-                ImGui::Text("Dystans punktu od linii: %s", func.a * P1.x - P1.y + func.b > 0 ? "Prawej" : "Lewej");
+                ImGui::Text("Punkt leży po %s stronie", func.a * P1.x - P1.y + func.b > 0 ? "Prawej" : "Lewej");
             }
             ImGui::EndChild();
 
