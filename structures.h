@@ -15,6 +15,10 @@
 
 #define clamp(v,mn,mx)  ((v < mn) ? mn : (v > mx) ? mx : v)
 
+#ifndef M_PIf
+#define M_PIf ((float)M_PI)
+#endif
+
 struct Vec2
 {
 public:
@@ -50,6 +54,8 @@ public:
 
     operator ImVec2() const { return { x,y }; }
 };
+
+inline std::istream& operator>>(std::istream& stream, Vec2 &pos) { stream >> pos.x; stream >> pos.y; return stream;};
 
 struct Rect {
     Vec2 min, max;
@@ -103,6 +109,17 @@ struct PointCloud {
     std::vector<CloudPoint> points;
     std::vector<int> hull_points; // Separately store indexes of points that build the convex hull
 
+    Rect GetBoundingBox() {
+        Rect res { {FLT_MAX, FLT_MAX}, {-FLT_MAX, -FLT_MAX}};
+        for(auto p : points) {
+            res.min.x = std::fmin(res.min.x, p.x);
+            res.min.y = std::fmin(res.min.y, p.y);
+            res.max.x = std::fmax(res.max.x, p.x);
+            res.max.y = std::fmax(res.max.y, p.y);
+        }
+        return res;
+    }
+
     PointCloud(const char* src_file, float scale = 1, Vec2 offset = {0, 0}) {
         using namespace std;
 
@@ -123,8 +140,13 @@ struct PointCloud {
         }
     }
 
+    PointCloud() = default;
+
     // Jarvis
     void UpdateConvexHull_Jarvis() {
+        if(points.size() < 3)
+            return;
+
         hull_points.clear();
 
         int lowest_point_idx = 0;
@@ -149,12 +171,12 @@ struct PointCloud {
             hull_points.push_back(best_idx);
 
             last_best = best_idx;
-            best_idx = 0;
-            line = GeneralLineFunc(points[best_idx], points[last_best]);
+            best_idx = (best_idx + 1) % points.size();
+            //line = GeneralLineFunc(points[best_idx], points[last_best]);
             for(int i = 0; i < points.size(); i++) {
-                //if(GetPointsOrientation(points[last_best], points[i], points[best_idx]) > 0) {
-                if(GetOrientationOfPointsAlongLine(line, points[i]) > 0) {
-                    line = GeneralLineFunc(points[last_best], points[i]);
+                if(GetPointsOrientation(points[last_best], points[i], points[best_idx]) > 0) {
+                //if(GetOrientationOfPointsAlongLine(line, points[i]) > 0) {
+                    //line = GeneralLineFunc(points[last_best], points[i]);
                     best_idx = i;
                 }
             }
@@ -163,6 +185,9 @@ struct PointCloud {
     }
 
     void QuickHull() {
+        if(points.size() < 3)
+            return;
+
         hull_points.clear();
 
         int min_x = 0, max_x = 0, min_y = 0;
@@ -431,6 +456,16 @@ private:
      */
 };
 
+template<typename Ty>
+struct EulerObject {
+    explicit EulerObject(Ty obj) : obj(obj) {}
+
+    Ty obj;
+    Rect bb;
+    Vec2 pos {0, 0}; // more like an offset
+    Vec2 velocity {0, 0};
+    float start_time = 0;
+};
 
 struct Polygon
 {

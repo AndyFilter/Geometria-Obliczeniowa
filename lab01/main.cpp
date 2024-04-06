@@ -197,7 +197,7 @@ int OnGui()
             //LineFunc constructed_func(A.x - B.x, B.y - A.y, A.y * (B.x - A.x) - (B.y - A.y) * A.x);
             // dist = |A * P1.x + B * P1.y + C| / sqrt(A^2+B^2)
             //float func_dist = fabsf(constructed_func.A * P1.x + (constructed_func.B * P1.y) + constructed_func.C) / \
-                    sqrtf(constructed_func.A * constructed_func.A + constructed_func.B * constructed_func.B);
+            //        sqrtf(constructed_func.A * constructed_func.A + constructed_func.B * constructed_func.B);
             Vec2 mid_point = Vec2((A.x + B.x), (A.y + B.y)) / 2;
             float mid_dist = mid_point.dist(P1);
             float point_dist = fmin(P1.dist(A), P1.dist(B));

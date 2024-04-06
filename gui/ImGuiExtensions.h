@@ -11,7 +11,8 @@
 #define POINT_BASE_COLOR LINE_BASE_COLOR
 #define POINT_SPECIAL_COLOR LINE_SPECIAL_COLOR
 #define POINT_BASE_RADIUS 8
-#define POINT_CLOUD_RADIUS 2
+#define POINT_CLOUD_BASE_RADIUS 2
+//#define POINT_CLOUD_HULL_RADIUS 4
 
 #define SHAPE_FILL_COLOR (LINE_BASE_COLOR - 0xCC000000)
 
@@ -25,6 +26,9 @@ namespace ImGui {
     void DrawArrow(ImDrawList* dl, Vec2 start, Vec2 end, ImU32 col = LINE_BASE_COLOR, float thickness = 2);
     void DrawDistanceLine(Vec2 p1, Vec2 p2, ImDrawList* dl, float distance_if_known = FLT_MAX, ImU32 col = LINE_BASE_COLOR,
                           float thickness = 1);
+    void DrawConvexHull(PointCloud cp, ImDrawList* dl, bool draw_outline = true, float point_size = POINT_CLOUD_BASE_RADIUS,
+                        Vec2 size = {-1, -1}, Vec2 offset = {0, 0}, ImU32 hull_points_col = POINT_SPECIAL_COLOR,
+                                Vec2 pos_offset = {0,0});
 
     // User Configured Parameters
     bool DirectionalLineParams(DirectionalLineFunc& func);

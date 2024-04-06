@@ -1,6 +1,7 @@
 //#include "structures.h"
 
-#include <cmath>
+#define _USE_MATH_DEFINES
+#include <math.h>
 
 struct Vec2;
 struct GeneralLineFunc;

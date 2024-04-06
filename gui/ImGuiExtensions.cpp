@@ -36,6 +36,29 @@ void ImGui::DrawArrow(ImDrawList *dl, Vec2 start, Vec2 end, ImU32 col, float thi
     dl->AddLine(end, end - rotated_dir2, col, thickness);
 }
 
+void ImGui::DrawConvexHull(PointCloud cp, ImDrawList *dl, bool draw_outline, float point_size,
+                           Vec2 size, Vec2 offset, ImU32 hull_points_col, Vec2 pos_offset) {
+    bool should_transform = size.x != -1;
+
+    for(auto& point : cp.points) {
+        auto pos = should_transform ? Local2Canvas(point + pos_offset, size, offset) : (point + pos_offset);
+        dl->AddCircleFilled(pos, point_size, POINT_BASE_COLOR);
+    }
+
+    if(!draw_outline || cp.hull_points.empty())
+        return;
+
+    auto last_pos = cp.points[cp.hull_points[cp.hull_points.size() - 1]];
+    last_pos = should_transform ? Local2Canvas(last_pos + pos_offset, size, offset) : (last_pos + pos_offset);
+    for(auto& point_idx : cp.hull_points) {
+        auto point = cp.points[point_idx];
+        auto pos = should_transform ? Local2Canvas(point + pos_offset, size, offset) : (point + pos_offset);
+        dl->AddLine(pos, last_pos, LINE_BASE_COLOR, LINE_BASE_THICKNESS);
+        last_pos = pos;
+        dl->AddCircleFilled(pos, point_size, hull_points_col);
+    }
+}
+
 bool ImGui::DirectionalLineParams(DirectionalLineFunc &func) {
 
     ImGui::Text("y ="); ImGui::SameLine();
