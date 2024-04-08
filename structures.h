@@ -61,6 +61,11 @@ struct Rect {
     Vec2 min, max;
 
     Rect(Vec2 min = {0, 0}, Vec2 max = {0, 0}): min(min), max(max) {};
+
+    bool IsPointInside(Vec2 point) const {
+        return  point.x >= min.x && point.x <= max.x &&
+                point.y >= min.y && point.y <= max.y;
+    }
 };
 
 struct GeneralLineFunc
@@ -141,6 +146,35 @@ struct PointCloud {
     }
 
     PointCloud() = default;
+
+
+    bool PointTest(Vec2 p) {
+        Vec2 lastPoint = points[hull_points[hull_points.size() - 1]];
+
+        int left = 0;
+
+        GeneralLineFunc horizontal_line{0, 1, -p.y};
+
+        //for (int i = 0; i < hull_points.size(); ++i) {
+        for(int i : hull_points) {
+            Vec2 point = points[i];
+
+            if(IsY_OnAABB(point, lastPoint, p.y)) {
+                auto intersect = GeneralLineFunc(point, lastPoint).GetCollisionPoint(horizontal_line);
+
+                // Left side
+                if(intersect.x <= p.x)
+                {
+                    if(fminf(point.y, lastPoint.y) < p.y && fmaxf(point.y, lastPoint.y)  >= p.y)
+                        left++;
+                }
+            }
+
+            lastPoint = point;
+        }
+
+        return left % 2 == 1;
+    }
 
     // Jarvis
     void UpdateConvexHull_Jarvis() {
@@ -462,9 +496,13 @@ struct EulerObject {
 
     Ty obj;
     Rect bb;
-    Vec2 pos {0, 0}; // more like an offset
+    Vec2 start_pos {0, 0}; // more like an offset
     Vec2 velocity {0, 0};
     float start_time = 0;
+
+    Vec2 GetPosAtTime(float t) {
+        return start_pos + (velocity * (t - start_time));
+    }
 };
 
 struct Polygon

@@ -39,8 +39,12 @@ message(${CMAKE_SOURCE_DIR}/../Dependencies/GLFW/Include)
 target_link_directories(${PROJECT_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/../Dependencies/GLFW/lib-vc2022)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/../Dependencies/GLFW/Include)
 
-#find_package(glfw3 3.3 REQUIRED)
-target_link_libraries(${PROJECT_NAME} glfw3) # Possibly glfw3 for Windows
+if (UNIX)
+    find_package(glfw3 3.3 REQUIRED)
+    target_link_libraries(${PROJECT_NAME} glfw)
+else ()
+    target_link_libraries(${PROJECT_NAME} glfw3)
+endif ()
 
 find_package(OpenGL REQUIRED)
 target_link_libraries(${PROJECT_NAME} OpenGL::GL)

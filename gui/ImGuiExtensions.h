@@ -21,7 +21,7 @@
 #define CANVAS_SIZE 10.f
 
 namespace ImGui {
-    bool DrawPoint(Vec2 pos, const char* label, ImDrawList* dl, float radius = POINT_BASE_RADIUS, ImU32 col = LINE_BASE_COLOR);
+    bool DrawPoint(Vec2 pos, const char* label, ImDrawList* dl, float radius = POINT_BASE_RADIUS, ImU32 col = POINT_BASE_COLOR);
     void DrawCanvas(ImDrawList* dl, Vec2 pos, Vec2 size = {0,0});
     void DrawArrow(ImDrawList* dl, Vec2 start, Vec2 end, ImU32 col = LINE_BASE_COLOR, float thickness = 2);
     void DrawDistanceLine(Vec2 p1, Vec2 p2, ImDrawList* dl, float distance_if_known = FLT_MAX, ImU32 col = LINE_BASE_COLOR,

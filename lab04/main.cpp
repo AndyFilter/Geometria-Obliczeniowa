@@ -159,14 +159,22 @@ int OnGui()
             //static EulerObject<PointCloud> craft(PointCloud("../zad2/craft1_ksztalt.txt", ZAD2_SCALE_FACTOR, ZAD2_OFFSET));
 
             static float cur_time = 0.0f;
+            static float speed = 0.5;
 
             static bool show_bb = false;
             static bool show_hull = false;
-            static int scene_idx = 2;
+            static int craft_idx = 1;
+            static int missile_idx = 0;
 
-            static char scenes[] = "Scena 1\0Scena 2\0Scena 3";
+            static char sz_missiles[] = "Rakiety 1\0Rakiety 2\0Rakiety 3";
+            static char sz_crafts[] = "Statek 1\0Statek 2\0Statek 3";
             static Vec2* dragging_point = nullptr;
             static bool dirty = true;
+            static bool is_playing = false;
+
+            static bool is_bb_col = false;
+            static bool is_hull_col = false;
+            static std::set<int> colliding_points;
 
             if(!ImGui::IsMouseDown(0))
                 dragging_point = nullptr;
@@ -179,25 +187,75 @@ int OnGui()
                 ImGui::Checkbox("Pokaż \"Bounding Box\"", &show_bb);
                 ImGui::Checkbox("Pokaż otoczkę wypukłą", &show_hull);
 
-                ImGui::Text("Scena:");
-                if(ImGui::Combo("Scena", &scene_idx, scenes))
+                ImGui::Text("Rakiety:");
+                if(ImGui::Combo("##Missiles_idx", &missile_idx, sz_missiles)) {
                     cur_time = 0;
+                }
+
+                ImGui::Text("Statek:");
+                if(ImGui::Combo("##Craft_idx", &craft_idx, sz_crafts)) {
+                    cur_time = 0;
+                }
                 //if(ImGui::BeginCombo("Scena", "Scena 0")) {
                 //    ImGui::EndCombo();
                 //}
 
-                ImGui::SliderFloat("Czas", &cur_time, 0.0f, 2.0f, "%.2fs");
+                ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
-                ImGui::Spacing(); ImGui::Spacing();
+                dirty |= ImGui::SliderFloat("Czas", &cur_time, 0.0f, 2.0f, "%.2fs");
 
-                ImGui::SeparatorText("Wynik");
+                ImGui::SliderFloat("Prędkość", &speed, -1.5f, 1.5f, "%.2f");
+
+                if(is_playing) {
+                    if (ImGui::Button("Stop", {ImGui::CalcItemWidth(), 0})) {
+                        is_playing = false;
+                    }
+                }
+                else {
+                    if (ImGui::Button("Play", {ImGui::CalcItemWidth(), 0})) {
+                        if (cur_time >= 2) cur_time = 0;
+                        is_playing = true;
+                    }
+                }
+
+                //ImGui::Spacing();
+                //
+                //ImGui::SeparatorText("Wynik");
 
             }
             ImGui::EndChild();
 
-            if(dirty) {
+            if(is_playing) {
+                cur_time += ImGui::GetIO().DeltaTime * speed;
+
+                if(cur_time >= 2) {
+                    cur_time = 2;
+                    is_playing = false;
+                }
+            }
+
+            if(dirty || is_playing) {
                 //craft.obj.UpdateConvexHull_Jarvis();
                 //craft.bb = craft.obj.GetBoundingBox();
+                is_bb_col = false;
+                is_hull_col = false;
+                colliding_points.clear();
+
+                Vec2 craft_pos = crafts[craft_idx].GetPosAtTime(cur_time);
+                for(int i = 0; i < missiles[missile_idx].size(); i++) {
+                    auto missile = missiles[missile_idx][i];
+                    if(!is_bb_col) {
+                        is_bb_col |= crafts[craft_idx].bb.IsPointInside(missile.GetPosAtTime(cur_time) - craft_pos);
+                        if(is_bb_col)
+                            colliding_points.insert(i);
+                    }
+                    if(!is_hull_col) {
+                        is_hull_col |= crafts[craft_idx].obj.PointTest(missile.GetPosAtTime(cur_time) - craft_pos);
+                        if(is_hull_col)
+                            colliding_points.insert(i);
+                    }
+                }
+
                 dirty = false;
             }
 
@@ -213,26 +271,31 @@ int OnGui()
                 //avail += Vec2(-8, 0);
                 //startPos += Vec2(4, 0);
 
-                Vec2 craft_offset = crafts[scene_idx].pos + (crafts[scene_idx].velocity * cur_time);
+                Vec2 craft_offset = crafts[craft_idx].start_pos + (crafts[craft_idx].velocity * cur_time);
 
-                ImGui::DrawConvexHull(crafts[scene_idx].obj, dl, show_hull, 1, avail,
-                                      startPos, POINT_SPECIAL_COLOR, craft_offset);
+                ImGui::DrawConvexHull(crafts[craft_idx].obj, dl, show_hull, 1, avail,
+                                      startPos, is_hull_col ? POINT_SPECIAL_COLOR : LINE_BASE_COLOR, craft_offset);
 
                 if(show_bb)
-                    dl->AddRect(ImGui::Local2Canvas(crafts[scene_idx].bb.min + craft_offset, avail, startPos),
-                                ImGui::Local2Canvas(crafts[scene_idx].bb.max + craft_offset, avail, startPos),
-                                LINE_SPECIAL_COLOR, 0, 0, LINE_BASE_THICKNESS);
+                    dl->AddRect(ImGui::Local2Canvas(crafts[craft_idx].bb.min + craft_offset, avail, startPos),
+                                ImGui::Local2Canvas(crafts[craft_idx].bb.max + craft_offset, avail, startPos),
+                                is_bb_col ? LINE_SPECIAL_COLOR : LINE_BASE_COLOR, 0, 0, LINE_BASE_THICKNESS);
 
-                //for(auto& missile : missiles[scene_idx]) {
-                for(int i = 0; i < missiles[scene_idx].size(); i++) {
-                    auto missile = missiles[scene_idx][i];
+                //for(auto& missile : missiles[missile_idx]) {
+                for(int i = 0; i < missiles[missile_idx].size(); i++) {
+                    auto missile = missiles[missile_idx][i];
                     float time_alive = cur_time - missile.start_time;
-                    if(time_alive < 0)
+                    if(time_alive < -0.05)
                         continue;
-                    auto pos = ImGui::Local2Canvas(missile.pos + (missile.velocity * time_alive), avail, startPos);
-                    char buff[10];
-                    sprintf(buff, "%i", i);
-                    ImGui::DrawPoint(pos, buff  , dl);
+                    auto pos = ImGui::Local2Canvas(missile.start_pos + (missile.velocity * time_alive), avail, startPos);
+                    //char buff[10];
+                    //sprintf(buff, "%i", i);
+                    //ImGui::DrawPoint(pos, buff, dl, POINT_BASE_RADIUS,
+                    //                 (colliding_points.find(i) != colliding_points.end()) ?
+                    //                 POINT_SPECIAL_COLOR : POINT_BASE_COLOR);
+                    dl->AddCircleFilled(pos, POINT_BASE_RADIUS,
+                                        (colliding_points.find(i) != colliding_points.end()) ?
+                                        POINT_SPECIAL_COLOR : POINT_BASE_COLOR);
                 }
 
                 if(dragging_point) {
@@ -269,8 +332,8 @@ int main() {
             continue;
 
         EulerObject<PointCloud> obj = EulerObject<PointCloud>(PointCloud());
-        while (file >> obj.start_time && file >> obj.pos && file >> obj.velocity) {
-            obj.pos = obj.pos * ZAD2_SCALE_FACTOR + ZAD2_OFFSET; // transform to local coordinates
+        while (file >> obj.start_time && file >> obj.start_pos && file >> obj.velocity) {
+            obj.start_pos = obj.start_pos * ZAD2_SCALE_FACTOR + ZAD2_OFFSET; // transform to local coordinates
             obj.velocity = obj.velocity * ZAD2_SCALE_FACTOR; // transform to local coordinates
             //obj.start_time *= 1000; // convert to millis
             missiles[i-1].push_back(obj);
@@ -291,8 +354,8 @@ int main() {
         EulerObject<PointCloud> obj = EulerObject<PointCloud>(PointCloud());
         obj.obj = craft_pc;
         obj.bb = bb;
-        while (file >> obj.pos && file >> obj.velocity) {
-            obj.pos = obj.pos * ZAD2_SCALE_FACTOR + ZAD2_OFFSET; // transform to local coordinates
+        while (file >> obj.start_pos && file >> obj.velocity) {
+            obj.start_pos = obj.start_pos * ZAD2_SCALE_FACTOR + ZAD2_OFFSET; // transform to local coordinates
             obj.velocity = obj.velocity * ZAD2_SCALE_FACTOR; // transform to local coordinates
             crafts[i-1] = obj;
         }

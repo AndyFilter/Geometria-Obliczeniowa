@@ -1194,13 +1194,13 @@ static StbUndoRecord *stb_text_create_undo_record(StbUndoState *state, int numch
    return &state->undo_rec[state->undo_point++];
 }
 
-static IMSTB_TEXTEDIT_CHARTYPE *stb_text_createundo(StbUndoState *state, int pos, int insert_len, int delete_len)
+static IMSTB_TEXTEDIT_CHARTYPE *stb_text_createundo(StbUndoState *state, int start_pos, int insert_len, int delete_len)
 {
    StbUndoRecord *r = stb_text_create_undo_record(state, insert_len);
    if (r == NULL)
       return NULL;
 
-   r->where = pos;
+   r->where = start_pos;
    r->insert_length = (IMSTB_TEXTEDIT_POSITIONTYPE) insert_len;
    r->delete_length = (IMSTB_TEXTEDIT_POSITIONTYPE) delete_len;
 

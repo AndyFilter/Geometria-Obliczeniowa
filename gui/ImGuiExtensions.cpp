@@ -53,7 +53,7 @@ void ImGui::DrawConvexHull(PointCloud cp, ImDrawList *dl, bool draw_outline, flo
     for(auto& point_idx : cp.hull_points) {
         auto point = cp.points[point_idx];
         auto pos = should_transform ? Local2Canvas(point + pos_offset, size, offset) : (point + pos_offset);
-        dl->AddLine(pos, last_pos, LINE_BASE_COLOR, LINE_BASE_THICKNESS);
+        dl->AddLine(pos, last_pos, hull_points_col, LINE_BASE_THICKNESS);
         last_pos = pos;
         dl->AddCircleFilled(pos, point_size, hull_points_col);
     }
