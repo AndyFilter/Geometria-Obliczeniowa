@@ -101,6 +101,48 @@ struct DirectionalLineFunc
     };
 };
 
+struct RangeTree1D {
+    struct Node {
+        float value = 0;
+        Node* left = nullptr;
+        Node* right = nullptr;
+
+        Node* prev = nullptr;
+
+        Node(float v) : value(v) {};
+    } *head = nullptr;
+
+    int height = 0;
+
+    std::vector<float> points;
+
+    RangeTree1D(std::initializer_list<float> _points) : RangeTree1D((float*)_points.begin(), (float*)_points.end()) {};
+    RangeTree1D(std::vector<float> &_points) : RangeTree1D(_points.data(), _points.data() + _points.size()) {};
+    RangeTree1D(float* beg, float* end);
+
+    void Select(float l_bound, float h_bound);
+
+private:
+    void _Construct(float* beg, float* end, Node* node);
+    int _CalcHeight(Node* node, int level = 0);
+};
+
+//struct RangeTree2D {
+//    struct Node {
+//        Node* left = nullptr;
+//        Node* right = nullptr;
+//
+//        Node* prev = nullptr;
+//    } *head = nullptr;
+//
+//    std::vector<Vec2> points;
+//
+//    RangeTree2D(std::initializer_list<Vec2> _points) : RangeTree2D((Vec2*)_points.begin(), (Vec2*)_points.end()) {};
+//    RangeTree2D(std::vector<Vec2> _points) : RangeTree2D(_points.data(), _points.data() + _points.size()) {};
+//    RangeTree2D(Vec2* beg, Vec2* end);
+//};
+
+
 struct PointCloud {
     struct CloudPoint : public Vec2 {
         bool include_in_hull = false;

@@ -14,6 +14,11 @@
 #define POINT_CLOUD_BASE_RADIUS 2
 //#define POINT_CLOUD_HULL_RADIUS 4
 
+#define TREE_NODE_RADIUS 20
+#define TREE_NODE_COLOR (0xFF593018)
+
+inline float a=2.4, b=4, c=0;
+
 #define SHAPE_FILL_COLOR (LINE_BASE_COLOR - 0xCC000000)
 
 #define DELETE_BUTTON_HUE 0.988f //0xFFD33F49
@@ -29,6 +34,7 @@ namespace ImGui {
     void DrawConvexHull(PointCloud cp, ImDrawList* dl, bool draw_outline = true, float point_size = POINT_CLOUD_BASE_RADIUS,
                         Vec2 size = {-1, -1}, Vec2 offset = {0, 0}, ImU32 hull_points_col = POINT_SPECIAL_COLOR,
                                 Vec2 pos_offset = {0,0});
+    int DrawTree1D(RangeTree1D* tree, Vec2 pos);
 
     // User Configured Parameters
     bool DirectionalLineParams(DirectionalLineFunc& func);

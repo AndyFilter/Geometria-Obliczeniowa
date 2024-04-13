@@ -59,6 +59,40 @@ void ImGui::DrawConvexHull(PointCloud cp, ImDrawList *dl, bool draw_outline, flo
     }
 }
 
+int _tree_height = 0; // l
+void draw_tree_node(RangeTree1D::Node* node, Vec2 pos, int level = 0) {
+    if(!node)
+        return;
+    auto dl = ImGui::GetWindowDrawList();
+
+    //float hf = powf(2, -level) * powf(2, _tree_height-2) * TREE_NODE_RADIUS; // Working
+    float hf = powf(2, _tree_height-2-level) * TREE_NODE_RADIUS; // Working
+    //float hf = powf(2, height - 1) * TREE_NODE_RADIUS;
+
+    if(node->left) {
+        auto newPos = pos + Vec2(-hf, 50);
+        dl->AddLine(pos, newPos, LINE_BASE_COLOR, LINE_BASE_THICKNESS);
+        draw_tree_node(node->left, newPos, level + 1);
+    }
+    if(node->right) {
+        auto newPos = pos + Vec2(hf, 50);
+        dl->AddLine(pos, newPos, LINE_BASE_COLOR, LINE_BASE_THICKNESS);
+        draw_tree_node(node->right, newPos, level + 1);
+    }
+
+    dl->AddCircleFilled(pos, TREE_NODE_RADIUS, TREE_NODE_COLOR);
+    char buf[10];
+    sprintf(buf, "%.1f", node->value);
+    ImGui::RenderTextClipped(pos - TREE_NODE_RADIUS, pos + TREE_NODE_RADIUS, buf, 0, 0, {0.5, 0.5});
+}
+
+int ImGui::DrawTree1D(RangeTree1D* tree, Vec2 pos) {
+    _tree_height = tree->height;
+    draw_tree_node(tree->head, pos);
+
+    return 0;
+}
+
 bool ImGui::DirectionalLineParams(DirectionalLineFunc &func) {
 
     ImGui::Text("y ="); ImGui::SameLine();
