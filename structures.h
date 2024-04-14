@@ -36,6 +36,7 @@ public:
     inline Vec2 normal() const { float _mag = mag(); return {x/_mag, y/_mag}; }
 
     inline const void Clamp(Vec2 mn, Vec2 mx) { x = clamp(x, mn.x, mx.x); y = clamp(y, mn.y, mx.y); };
+    inline const void Clamp(float mn, float mx) { x = clamp(x, mn, mx); y = clamp(y, mn, mx); };
 
     Vec2 operator=(const Vec2& other) { return { this->x = other.x, this->y = other.y }; }
     Vec2 operator+(const Vec2& other) { return { this->x + other.x, this->y + other.y }; }
@@ -109,6 +110,8 @@ struct RangeTree1D {
 
         Node* prev = nullptr;
 
+        bool is_selected = false;
+
         Node(float v) : value(v) {};
     } *head = nullptr;
 
@@ -123,24 +126,45 @@ struct RangeTree1D {
     void Select(float l_bound, float h_bound);
 
 private:
-    void _Construct(float* beg, float* end, Node* node);
+    Node* _Construct(float* beg, float* end, Node* parent);
     int _CalcHeight(Node* node, int level = 0);
+    void _Unselect(Node* node);
+    void _Select(Node* node, float l_bound, float h_bound);
 };
 
-//struct RangeTree2D {
-//    struct Node {
-//        Node* left = nullptr;
-//        Node* right = nullptr;
-//
-//        Node* prev = nullptr;
-//    } *head = nullptr;
-//
-//    std::vector<Vec2> points;
-//
-//    RangeTree2D(std::initializer_list<Vec2> _points) : RangeTree2D((Vec2*)_points.begin(), (Vec2*)_points.end()) {};
-//    RangeTree2D(std::vector<Vec2> _points) : RangeTree2D(_points.data(), _points.data() + _points.size()) {};
-//    RangeTree2D(Vec2* beg, Vec2* end);
-//};
+struct RangeTree2D {
+    struct Node {
+        Vec2 value = 0;
+        Node* left = nullptr;
+        Node* right = nullptr;
+
+        Node* sub_left = nullptr;
+        Node* sub_right = nullptr;
+
+        Node* prev = nullptr;
+
+        bool is_selected = false;
+
+        Node(Vec2 v) : value(v) {};
+    } *head = nullptr;
+
+    int height = 0;
+
+    std::vector<Vec2> points_x;
+    std::vector<Vec2> points_y;
+
+    RangeTree2D(std::initializer_list<Vec2> _points) : RangeTree2D((Vec2*)_points.begin(), (Vec2*)_points.end()) {};
+    RangeTree2D(std::vector<Vec2> &_points) : RangeTree2D(_points.data(), _points.data() + _points.size()) {};
+    RangeTree2D(Vec2* beg, Vec2* end);
+
+    void Select(Vec2 l_bound, Vec2 h_bound);
+
+private:
+    RangeTree2D::Node* _Construct(Vec2* beg, Vec2* end, Node* node);
+    int _CalcHeight(Node* node, int level = 0);
+    void _Unselect(Node* node);
+    void _Select(Node* node, Vec2 l_bound, Vec2 h_bound);
+};
 
 
 struct PointCloud {

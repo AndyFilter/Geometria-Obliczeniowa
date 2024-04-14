@@ -9,5 +9,7 @@ namespace GUI
     int RenderFrame();
     void ShutDown();
 
+    void SetWindowSize(int x, int y);
+
     inline GLFWwindow* window;
 }

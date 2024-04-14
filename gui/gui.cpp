@@ -223,7 +223,7 @@ int GUI::RenderFrame() {
 
 
     // Imgui Demo Window
-    ImGui::ShowDemoWindow();
+    //ImGui::ShowDemoWindow();
 
 
     ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
@@ -252,4 +252,8 @@ int GUI::RenderFrame() {
     glfwSwapBuffers(window);
 
     return 0;
+}
+
+void GUI::SetWindowSize(int x, int y) {
+    glfwSetWindowSize(window ,x, y);
 }

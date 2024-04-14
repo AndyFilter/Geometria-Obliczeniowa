@@ -59,8 +59,9 @@ void ImGui::DrawConvexHull(PointCloud cp, ImDrawList *dl, bool draw_outline, flo
     }
 }
 
-int _tree_height = 0; // l
-void draw_tree_node(RangeTree1D::Node* node, Vec2 pos, int level = 0) {
+int _tree_height = 0;
+
+void draw_tree_node_1D(RangeTree1D::Node* node, Vec2 pos, int level = 0) {
     if(!node)
         return;
     auto dl = ImGui::GetWindowDrawList();
@@ -70,17 +71,17 @@ void draw_tree_node(RangeTree1D::Node* node, Vec2 pos, int level = 0) {
     //float hf = powf(2, height - 1) * TREE_NODE_RADIUS;
 
     if(node->left) {
-        auto newPos = pos + Vec2(-hf, 50);
-        dl->AddLine(pos, newPos, LINE_BASE_COLOR, LINE_BASE_THICKNESS);
-        draw_tree_node(node->left, newPos, level + 1);
+        auto newPos = pos + Vec2(-hf, 60);
+        dl->AddLine(pos, newPos, TREE_NODE_LINE_COLOR, LINE_BASE_THICKNESS);
+        draw_tree_node_1D(node->left, newPos, level + 1);
     }
     if(node->right) {
-        auto newPos = pos + Vec2(hf, 50);
-        dl->AddLine(pos, newPos, LINE_BASE_COLOR, LINE_BASE_THICKNESS);
-        draw_tree_node(node->right, newPos, level + 1);
+        auto newPos = pos + Vec2(hf, 60);
+        dl->AddLine(pos, newPos, TREE_NODE_LINE_COLOR, LINE_BASE_THICKNESS);
+        draw_tree_node_1D(node->right, newPos, level + 1);
     }
 
-    dl->AddCircleFilled(pos, TREE_NODE_RADIUS, TREE_NODE_COLOR);
+    dl->AddCircleFilled(pos, TREE_NODE_RADIUS, node->is_selected ? TREE_NODE_SPECIAL_COLOR : TREE_NODE_COLOR);
     char buf[10];
     sprintf(buf, "%.1f", node->value);
     ImGui::RenderTextClipped(pos - TREE_NODE_RADIUS, pos + TREE_NODE_RADIUS, buf, 0, 0, {0.5, 0.5});
@@ -88,7 +89,94 @@ void draw_tree_node(RangeTree1D::Node* node, Vec2 pos, int level = 0) {
 
 int ImGui::DrawTree1D(RangeTree1D* tree, Vec2 pos) {
     _tree_height = tree->height;
-    draw_tree_node(tree->head, pos);
+    draw_tree_node_1D(tree->head, pos);
+
+    return 0;
+}
+
+
+void draw_tree_node_2D(RangeTree2D::Node* node, Vec2 pos, int level = 0, bool is_sub_tree = false) {
+    if(!node)
+        return;
+    auto dl = ImGui::GetWindowDrawList();
+
+    const float y_scale = 0.9f;
+    const float ADJ_RADIUS = is_sub_tree ? (TREE_NODE_RADIUS * y_scale) : TREE_NODE_RADIUS;
+    const float ADJ_HEIGHT = is_sub_tree ? (TREE_NODE_HEIGHT_2D * y_scale) : TREE_NODE_HEIGHT_2D;
+
+    float hf = powf(2, _tree_height-2-level) * ADJ_RADIUS; // Working
+
+    if(node->left) {
+        auto newPos = pos + Vec2(-hf, ADJ_HEIGHT);
+        dl->AddLine(pos, newPos, TREE_NODE_LINE_COLOR, LINE_BASE_THICKNESS);
+        draw_tree_node_2D(node->left, newPos, level + 1, is_sub_tree);
+    }
+    if(node->right) {
+        auto newPos = pos + Vec2(hf, ADJ_HEIGHT);
+        dl->AddLine(pos, newPos, TREE_NODE_LINE_COLOR, LINE_BASE_THICKNESS);
+        draw_tree_node_2D(node->right, newPos, level + 1, is_sub_tree);
+    }
+
+    Vec2 margin = ImGui::GetStyle().WindowPadding;
+    //ImDrawList* bkp_dl = nullptr;
+
+    // Start drawing the sub tree
+    if(node->sub_left && !is_sub_tree &&
+       ImGui::IsMouseHoveringRect(pos - Vec2(ADJ_RADIUS,ADJ_RADIUS), pos + Vec2(ADJ_RADIUS,ADJ_RADIUS))) {
+
+        // w, h are the new (scaled) parameters defining the tree shape
+        float w = (TREE_NODE_RADIUS * y_scale), h = (TREE_NODE_HEIGHT_2D * y_scale);
+        // sub_tree's width (assuming all balance)
+        float width = (2 << (_tree_height - level - 2)) * w;
+        Vec2 sub_tree_offset = Vec2(0,  h);
+        Rect bb = {pos - Vec2(width,TREE_NODE_RADIUS) - margin,
+                   pos + Vec2(width,(_tree_height - level - 1) * h + w) + margin};
+
+        //bkp_dl = ImGui::GetCurrentWindow()->DrawList;
+        //ImGui::GetCurrentWindow()->DrawList = ImGui::GetForegroundDrawList(ImGui::GetCurrentWindow());
+        //dl = ImGui::GetCurrentWindow()->DrawList;
+
+        dl->AddRectFilled(bb.min, bb.max, TREE_NODE_FRAME_BG, 10);
+        dl->AddRect(bb.min, bb.max, LINE_BASE_COLOR, 10); // Draw frame
+
+        auto child_pos = pos + sub_tree_offset;
+        if(node->sub_left) {
+            auto newPos = child_pos + Vec2(-width/2, 0);
+            dl->AddLine(pos, newPos, TREE_NODE_LINE_COLOR, LINE_BASE_THICKNESS);
+            draw_tree_node_2D(node->sub_left, newPos, level + 1, true);
+        }
+        if(node->sub_right) {
+            auto newPos = child_pos + Vec2(width/2, 0);
+            dl->AddLine(pos, newPos, TREE_NODE_LINE_COLOR, LINE_BASE_THICKNESS);
+            draw_tree_node_2D(node->sub_right, newPos, level + 1, true);
+        }
+    }
+
+    dl->AddCircleFilled(pos, ADJ_RADIUS, node->is_selected ? TREE_NODE_SPECIAL_COLOR : TREE_NODE_COLOR);
+    char buf[10];
+    sprintf(buf, "%.1f\n%.1f", node->value.x, node->value.y);
+
+    // Apply all the transformation needed to draw the subtree
+    if(is_sub_tree) {
+        // kinda hacky way to change the font's size
+        auto font = ImGui::GetFont();
+        float ogScale = font->Scale;
+        font->Scale = sqrt(y_scale);
+        ImGui::PushFont(font);
+        ImGui::RenderTextClipped(pos - ADJ_RADIUS, pos + ADJ_RADIUS, buf, 0, 0, {0.5, 0.5});
+        font->Scale = ogScale;
+        ImGui::PopFont();
+    }
+    else
+        ImGui::RenderTextClipped(pos - ADJ_RADIUS, pos + ADJ_RADIUS, buf, 0, 0, {0.5, 0.5});
+
+    //if(bkp_dl)
+    //    ImGui::GetCurrentWindow()->DrawList = bkp_dl;
+}
+
+int ImGui::DrawTree2D(RangeTree2D *tree, Vec2 pos) {
+    _tree_height = tree->height;
+    draw_tree_node_2D(tree->head, pos);
 
     return 0;
 }

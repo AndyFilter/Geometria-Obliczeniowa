@@ -14,10 +14,12 @@
 #define POINT_CLOUD_BASE_RADIUS 2
 //#define POINT_CLOUD_HULL_RADIUS 4
 
-#define TREE_NODE_RADIUS 20
+#define TREE_NODE_RADIUS 22
 #define TREE_NODE_COLOR (0xFF593018)
-
-inline float a=2.4, b=4, c=0;
+#define TREE_NODE_LINE_COLOR (0xFFE09D4D) // E09D4D //0xFFB4B3BF
+#define TREE_NODE_SPECIAL_COLOR (0xFF4623AB)
+#define TREE_NODE_HEIGHT_2D 75
+#define TREE_NODE_FRAME_BG 0xF0090909 // #55DDE0 //0xB0090909
 
 #define SHAPE_FILL_COLOR (LINE_BASE_COLOR - 0xCC000000)
 
@@ -35,6 +37,7 @@ namespace ImGui {
                         Vec2 size = {-1, -1}, Vec2 offset = {0, 0}, ImU32 hull_points_col = POINT_SPECIAL_COLOR,
                                 Vec2 pos_offset = {0,0});
     int DrawTree1D(RangeTree1D* tree, Vec2 pos);
+    int DrawTree2D(RangeTree2D* tree, Vec2 pos);
 
     // User Configured Parameters
     bool DirectionalLineParams(DirectionalLineFunc& func);
