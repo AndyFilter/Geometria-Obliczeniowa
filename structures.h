@@ -52,11 +52,23 @@ public:
     ImVec2 operator+(const ImVec2& other) { return { this->x + other.x, this->y + other.y }; }
     ImVec2 operator-(const ImVec2& other) { return { this->x - other.x, this->y - other.y }; }
     bool operator==(const Vec2& other) const { return x == other.x && y == other.y; }
+    bool operator!=(const Vec2& other) const { return x != other.x || y != other.y; }
 
     operator ImVec2() const { return { x,y }; }
 };
 
 inline std::istream& operator>>(std::istream& stream, Vec2 &pos) { stream >> pos.x; stream >> pos.y; return stream;};
+
+struct Triangle;
+
+struct Edge{
+    int start = 0, end = 0;
+
+    Edge() = default;
+    Edge(int begin, int end): start(begin), end(end) {};
+};
+
+inline std::istream& operator>>(std::istream& stream, Edge &pos) { stream >> pos.start; stream >> pos.end; return stream;};
 
 struct Rect {
     Vec2 min, max;
@@ -100,6 +112,50 @@ struct DirectionalLineFunc
         a = (p2.y - p1.y) / (p2.x - p1.x);
         b = p1.y - (a * p1.x);
     };
+};
+
+struct StructuredPolygon{
+    std::vector<Vec2> points;
+    std::vector<Edge> edges;
+
+    StructuredPolygon(const char* pts_file_name, const char* egs_file_name, Vec2 scale = {1,1}, Vec2 offset = {0,0});
+};
+
+struct TriangleMesh {
+
+    template<int n = 3>
+    struct MeshElement{
+        int points[n]{0};
+
+        MeshElement() = default;
+
+        bool Contains(int node_idx) {
+            return std::find(points, points + n, node_idx) != points + n;
+        }
+
+        MeshElement(std::initializer_list<int> elems) {
+            if(elems.size() != n)
+                return;
+            std::copy(elems.begin(), elems.end(), points);
+        }
+    };
+
+    std::vector<Vec2> nodes;
+    std::vector<MeshElement<3>> elements;
+
+    TriangleMesh(const char* pts_file_name, const char* edg_file_name, float r = 10, Vec2 scale = {1,1}, Vec2 offset = {0,0});
+    TriangleMesh(const char* pts_file_name, const char* tri_file_name, Vec2 scale = {1,1}, Vec2 offset = {0,0});
+
+private:
+    StructuredPolygon poly;
+    std::vector<Edge> edges;
+    Vec2 A, B;
+
+    int _IsPointColliding(Vec2 C, int idx, float radius, float &distance);
+    bool _CrossesFront(Vec2 p1, int pi, int idx);
+    bool _IsLineOccupied(int pi, int idx);
+    bool _PointTest(Vec2 p);
+    bool _IsInsideMesh(Vec2 p);
 };
 
 struct RangeTree1D {
@@ -209,6 +265,8 @@ struct PointCloud {
         while(file >> point.x && file >> point.y) {
             points[idx++] = point * scale + offset;
         }
+
+        file.close();
     }
 
     PointCloud() = default;
@@ -629,6 +687,8 @@ struct Triangle
 {
     Vec2 vtx[3] {0};
     bool is_valid = false;
+
+    Triangle() = default;
 
     Triangle(GeneralLineFunc f1, GeneralLineFunc f2, GeneralLineFunc f3) {
         feclearexcept(FE_ALL_EXCEPT);

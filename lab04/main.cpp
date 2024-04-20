@@ -84,7 +84,7 @@ int OnGui()
                             pc = PointCloud("../zad1/ksztalt_3.txt", 0.1, {-5, -5});
                             break;
                         case 2:
-                            pc = PointCloud("../zad1/PointCloud.dat", 0.03, {-9});
+                            pc = PointCloud("../zad1/mesh.dat", 0.02, {-11, -10});
                             break;
                     }
                 }
@@ -137,10 +137,13 @@ int OnGui()
                     //dl->AddLine(startPos, avail, LINE_BASE_COLOR);
                 }
 
+                Vec2 last_pos = ImGui::Local2Canvas(pc.points.back(), avail, startPos);
                 for(auto & point : pc.points) {
                     Vec2 pos = ImGui::Local2Canvas(point, avail, startPos);
                     dl->AddCircleFilled(pos, POINT_CLOUD_BASE_RADIUS,
                                         point.include_in_hull ? POINT_SPECIAL_COLOR : POINT_BASE_COLOR);
+                    dl->AddLine(pos, last_pos, LINE_BASE_COLOR, 1);
+                    last_pos = pos;
                 }
 
                 if(dragging_point) {

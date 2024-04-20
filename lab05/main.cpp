@@ -8,7 +8,7 @@
 #define RANGE_TREE_VALUE_RANGE 100
 
 std::vector<Vec2> random_points(16);
-std::vector<float> random_values(15);
+std::vector<float> random_values(16);
 
 int OnGui()
 {
