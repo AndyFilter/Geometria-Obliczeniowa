@@ -35,8 +35,8 @@ public:
     inline float mag() const { return sqrtf(x*x + (y*y)); }
     inline Vec2 normal() const { float _mag = mag(); return {x/_mag, y/_mag}; }
 
-    inline const void Clamp(Vec2 mn, Vec2 mx) { x = clamp(x, mn.x, mx.x); y = clamp(y, mn.y, mx.y); };
-    inline const void Clamp(float mn, float mx) { x = clamp(x, mn, mx); y = clamp(y, mn, mx); };
+    inline const Vec2 Clamp(Vec2 mn, Vec2 mx) { x = clamp(x, mn.x, mx.x); y = clamp(y, mn.y, mx.y); return *this; };
+    inline const Vec2 Clamp(float mn, float mx) { x = clamp(x, mn, mx); y = clamp(y, mn, mx); return *this; };
 
     Vec2 operator=(const Vec2& other) { return { this->x = other.x, this->y = other.y }; }
     Vec2 operator+(const Vec2& other) { return { this->x + other.x, this->y + other.y }; }
@@ -57,7 +57,8 @@ public:
     operator ImVec2() const { return { x,y }; }
 };
 
-inline std::istream& operator>>(std::istream& stream, Vec2 &pos) { stream >> pos.x; stream >> pos.y; return stream;};
+inline std::istream& operator>>(std::istream& stream, Vec2 &pos) { stream >> pos.x >> pos.y; return stream;};
+inline std::ostream& operator<<(std::ostream& stream, Vec2 pos) { stream << pos.x << '\t' << pos.y << '\n'; return stream;};
 
 struct Triangle;
 
@@ -68,7 +69,7 @@ struct Edge{
     Edge(int begin, int end): start(begin), end(end) {};
 };
 
-inline std::istream& operator>>(std::istream& stream, Edge &pos) { stream >> pos.start; stream >> pos.end; return stream;};
+inline std::istream& operator>>(std::istream& stream, Edge &edg) { stream >> edg.start; stream >> edg.end; return stream;};
 
 struct Rect {
     Vec2 min, max;
@@ -118,6 +119,7 @@ struct StructuredPolygon{
     std::vector<Vec2> points;
     std::vector<Edge> edges;
 
+    StructuredPolygon() = default;
     StructuredPolygon(const char* pts_file_name, const char* egs_file_name, Vec2 scale = {1,1}, Vec2 offset = {0,0});
 };
 
@@ -146,17 +148,29 @@ struct TriangleMesh {
     TriangleMesh(const char* pts_file_name, const char* edg_file_name, float r = 10, Vec2 scale = {1,1}, Vec2 offset = {0,0});
     TriangleMesh(const char* pts_file_name, const char* tri_file_name, Vec2 scale = {1,1}, Vec2 offset = {0,0});
 
-private:
-    StructuredPolygon poly;
-    std::vector<Edge> edges;
-    Vec2 A, B;
+    void Export(const char* pts_file_name, const char* elems_file_name, Vec2 scale = {1,1}, Vec2 offset = {0,0});
 
-    int _IsPointColliding(Vec2 C, int idx, float radius, float &distance);
-    bool _CrossesFront(Vec2 p1, int pi, int idx);
-    bool _IsLineOccupied(int pi, int idx);
+    void Recalculate(float r, int start_idx = -1);
+    void StepCalculations(float r, int& start_idx);
+    int idx_cap = -1;
+
     bool _PointTest(Vec2 p);
     bool _IsInsideMesh(Vec2 p);
+
+    StructuredPolygon poly;
+private:
+    std::vector<Edge> edges;
+    Vec2 A, B;
+    Vec2 _scale;
+
+    int _CheckPointProximity(Vec2 C, int idx, float radius, float &distance);
+    bool _CrossesFront(Vec2 p1, int pi, int idx);
+    bool _IsLineOccupied(int pi, int idx);
+
+    bool _PointInsidePolygon(Vec2 p1);
 };
+
+inline std::ostream& operator<<(std::ostream& stream, TriangleMesh::MeshElement<3> &tri) { stream << tri.points[0] << '\t' << tri.points[1] << '\t' << tri.points[2] << '\n'; return stream;};
 
 struct RangeTree1D {
     struct Node {
@@ -333,7 +347,7 @@ struct PointCloud {
             //line = GeneralLineFunc(points[best_idx], points[last_best]);
             for(int i = 0; i < points.size(); i++) {
                 if(GetPointsOrientation(points[last_best], points[i], points[best_idx]) > 0) {
-                //if(GetOrientationOfPointsAlongLine(line, points[i]) > 0) {
+                //if(GetDistanceFromPointToLine(line, points[i]) > 0) {
                     //line = GeneralLineFunc(points[last_best], points[i]);
                     best_idx = i;
                 }

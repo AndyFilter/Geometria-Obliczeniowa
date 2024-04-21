@@ -249,71 +249,117 @@ TriangleMesh::TriangleMesh(const char *pts_file_name, const char *tri_file_name,
     }
 }
 
-// Advancing front algorithm
 TriangleMesh::TriangleMesh(const char *pts_file_name, const char *edg_file_name, float r, Vec2 scale, Vec2 offset) {
+    // Create a polygon from points and edges first
     poly = StructuredPolygon(pts_file_name, edg_file_name, scale, offset);
-    auto front_edges_count = poly.edges.size();
 
+    _scale = scale;
+
+    // Do the algorithm (almost)
+    Recalculate(r);
+}
+
+
+// Ignore all this tbh. just go to "StepCalculation"
+// this is here so I can show the mesh generation process step-by-step
+void TriangleMesh::Recalculate(float r, int start_idx) {
+    r *= fabs(_scale.x);
+
+    static int idx = 0;
+
+    if(start_idx != -1)
+        idx = start_idx;
+
+    if(idx_cap < idx || start_idx != -1) {
+        nodes.clear();
+        edges.clear();
+        elements.clear();
+
+        nodes.resize(poly.points.size());
+        std::copy(poly.points.begin(), poly.points.end(), nodes.begin());
+
+        edges.resize(poly.edges.size());
+        std::copy(poly.edges.begin(), poly.edges.end(), edges.begin());
+
+        idx = 0;
+    }
+
+    StepCalculations(r, idx);
+}
+
+
+// Advancing front algorithm
+void TriangleMesh::StepCalculations(float r, int& idx) {
     // Define some constants used in the program
     const float s60 = sinf(60 * M_PI / 180.0);
     const float c60 = cosf(60 * M_PI / 180.0);
-    const float sn60 = sinf(-60 * M_PI / 180.0);
-    const float cn60 = cosf(-60 * M_PI / 180.0);
+    const auto front_edges_count = poly.edges.size();
 
-    nodes.resize(poly.points.size());
-    std::copy(poly.points.begin(), poly.points.end(), nodes.begin());
+    A = nodes[edges[0].start], B = nodes[edges[0].end];
 
-    edges.resize(poly.edges.size());
-    std::copy(poly.edges.begin(), poly.edges.end(), edges.begin());
+    next_triangle:
+    while(A != B && idx < edges.size() && (idx_cap < 0 || idx < idx_cap)) {
 
-    int idx = 0;
-    A = nodes[poly.edges[0].start], B = nodes[poly.edges[0].end];
-
-    while(A != B && idx < edges.size()) {
-next_triangle:
+        // Check if current points are not already building some other triangle
+        // If AB is part of 2 or more triangles (or 1 triangle and the original front)
+        // then you cannot create more triangles using it
         int tri_count = 0;
+        int mod_n_1 = front_edges_count - 1;
+        bool is_front = edges[idx].start < front_edges_count && edges[idx].end < front_edges_count && (abs(edges[idx].start - edges[idx].end) == 1 || abs(edges[idx].start - edges[idx].end) == mod_n_1);
         for(auto& elem : elements) {
             if(elem.Contains(edges[idx].start) && elem.Contains(edges[idx].end)){
-                tri_count += edges[idx].start < front_edges_count && edges[idx].end < front_edges_count ? 2 : 1;
+                tri_count += is_front ? 2 : 1;
                 if(tri_count >= 2) {
                     // Skip this triangle
-                    printf("Duplicate");
+                    printf("Duplicate (idx: %i, edges: [%i, %i])\n", idx, edges[idx].start, edges[idx].end);
                     idx += 1;
                     goto next_triangle;
                 }
             }
         }
 
+        // Get 2 consecutive points creating the next edge
         A = nodes[edges[idx].start];
         B = nodes[edges[idx].end];
 
         // Third point that creates the equilateral triangle
         Vec2 C = {c60 * (A.x - B.x) - s60 * (A.y - B.y) + B.x,
-            s60 * (A.x - B.x) + c60 * (A.y - B.y) + B.y };
+                  s60 * (A.x - B.x) + c60 * (A.y - B.y) + B.y };
 
+        // Check if any points exist that are within the radius "r" of the point C
         float dist = 0;
-        int merged_idx = _IsPointColliding(C, idx, r, dist);
+        int merged_idx = _CheckPointProximity(C, idx, r, dist);
         bool was_merged = merged_idx != -1;
         C = was_merged ? nodes[merged_idx] : C;
 
-        if(!was_merged && _PointTest(C)) {
-            Vec2 C_rot = {cn60 * (A.x - B.x) - sn60 * (A.y - B.y) + B.x,
-                          sn60 * (A.x - B.x) + cn60 * (A.y - B.y) + B.y };
+        // Point C is outside the mesh
+        if(!was_merged && !_PointTest(C)) {
+
+            // Get the other point making the equilateral triangle, using a different method, cuz why not
+            Vec2 mid_point = (A+B)/2; //center point
+            Vec2 ov = Vec2(A.y - B.y, B.x - A.x); //orthogonal vector
+            Vec2 C_rot = mid_point + (ov * sqrtf(3.f/4.f) );
 
             if(!_PointTest(C_rot)) {
                 float rot_dist = 0;
-                int rot_idx = _IsPointColliding(C_rot, idx, 999999, rot_dist);
-                merged_idx = _IsPointColliding(C, idx, 999999, dist);
+                int rot_idx = _CheckPointProximity(C_rot, idx, 999999, rot_dist);
+                //merged_idx = _CheckPointProximity(C, idx, 999999, dist);
 
-                if(rot_idx == -1 && merged_idx == -1) {
+                if(rot_idx == -1) {
                     idx += 1;
+                    printf("Skipping a triangle (Bounds) [idx: {%i}, edges: (%i, %i)]\n", idx, edges[idx].start, edges[idx].end);
                     continue;
                 }
 
-                C = rot_dist < dist ? C_rot : C;
+                //merged_idx = rot_dist < dist ? rot_idx : merged_idx;
+                merged_idx = rot_idx;
             }
-            else
-                merged_idx = _IsPointColliding(C, idx, r, dist);
+            else {
+                // New (rotated) point C is within the bounds of the mesh
+                merged_idx = _CheckPointProximity(C_rot, idx, r, dist);
+                if(merged_idx == -1)
+                    C = C_rot;
+            }
 
             was_merged = merged_idx != -1;
             C = was_merged ? nodes[merged_idx] : C;
@@ -321,9 +367,10 @@ next_triangle:
 
         // Colliding with other elements
         if(!was_merged && _IsInsideMesh(C)) {
-            merged_idx = _IsPointColliding(C, idx, 999999, dist);
+            merged_idx = _CheckPointProximity(C, idx, 999999, dist);
             if(merged_idx == -1) {
                 idx += 1;
+                printf("Skipping a triangle (Mesh) [idx: {%i}, edges: (%i, %i)]\n", idx, edges[idx].start, edges[idx].end);
                 continue;
             }
 
@@ -331,67 +378,114 @@ next_triangle:
             C = nodes[merged_idx];
         }
 
+        // Crosses front
         if(!was_merged && _CrossesFront(C, -1, idx)) {
-            merged_idx = _IsPointColliding(C, idx, 999999, dist);
+            merged_idx = _CheckPointProximity(C, idx, 999999, dist);
             if(merged_idx == -1) {
                 idx += 1;
+                printf("Skipping a triangle (Front) [idx: {%i}, edges: (%i, %i)]\n", idx, edges[idx].start, edges[idx].end);
                 continue;
             }
 
             was_merged = true;
             C = nodes[merged_idx];
         }
+
+        int C_idx = was_merged ? merged_idx : nodes.size();
+
+        // Push new triangle
+        elements.push_back({edges[idx].start, C_idx, edges[idx].end});
+
+        // Push 2 new edges going to the point C
+        edges.emplace_back(edges[idx].start, C_idx);
+        edges.emplace_back(C_idx, edges[idx].end);
+
+        //edges[idx] = Edge(-1, -1);
+
+        // We don't want to push a new point if it's not really "new" (it was merged)
+        if(!was_merged)
+            nodes.push_back(C);
+
+        idx++;
     }
 }
 
+// From lab04 I think, Polygon-Point test
 bool TriangleMesh::_PointTest(Vec2 p) {
-    Vec2 lastPoint = nodes[nodes.size() - 1];
+    //Vec2 lastPoint = poly.points[poly.points.size() - 1];
 
     int left = 0;
 
     GeneralLineFunc horizontal_line{0, 1, -p.y};
 
-    for (int i = 0; i < nodes.size(); ++i) {
-        Vec2 point = nodes[i];
+    for (int i = 0; i < poly.edges.size(); ++i) {
+        auto& e = poly.edges[i];
+        Vec2 start = poly.points[e.start];
+        Vec2 end = poly.points[e.end];
 
-        if(IsY_OnAABB(point, lastPoint, p.y)) {
+        if(IsY_OnAABB(end, start, p.y)) {
             //auto func = GeneralLineFunc(point, lastPoint);
-            auto intersect = GeneralLineFunc(point, lastPoint).GetCollisionPoint(horizontal_line);
+            auto intersect = GeneralLineFunc(start, end).GetCollisionPoint(horizontal_line);
 
             // Left side
             if(intersect.x <= p.x)
             {
                 //printf(" (LEFT)\n");
-                if(fminf(point.y, lastPoint.y) < p.y && fmaxf(point.y, lastPoint.y)  >= p.y)
+                if(fminf(end.y, start.y) < p.y && fmaxf(end.y, start.y) >= p.y)
                     left++;
             }
         }
 
-        lastPoint = point;
+        //lastPoint = end;
     }
 
     return left % 2 == 1;
 }
 
+// orientation of points
 bool ccw(Vec2 A, Vec2  B, Vec2 C) {
     return (((C.y - A.y) * (B.x - A.x )) > ((B.y - A.y) * (C.x - A.x)));
 }
 
+// Check if line segment AB intersects line segment CD
 bool intersect(Vec2 A, Vec2  B, Vec2 C, Vec2 D) {
     return ccw(A, C, D) != ccw(B, C, D) and ccw(A, B, C) != ccw(A, B, D);
 }
 
+// line AB
 bool isPointOnLine(Vec2 A, Vec2  B, Vec2 C) {
-    const float epsilon = 0.1;
-    return -epsilon < (A.dist(C) + C.dist(B) - A.dist(B));
+    const float epsilon = 0.001;
+    return -epsilon < (A.dist(C) + C.dist(B) - A.dist(B)) < epsilon;
 }
 
 bool TriangleMesh::_CrossesFront(Vec2 p1, int pi, int idx) {
+
+    // Check if the line form p1 to A and B don't create intersections with already existing edges
+    // And the line AB itself (that would be unusual)
+    for(int i = 0; i < edges.size(); i++) {
+        auto& e = edges[i];
+
+        if(i == idx)
+            continue;
+
+        Vec2 start = nodes[e.start], end = nodes[e.end];
+
+        if(start != A && end != A && start != B && end != B && intersect(A, B, start, end))
+            return true;
+
+        if(start != A && end != A && e.start != pi && e.end != pi && intersect(A, p1, start, end))
+            return true;
+
+        if(start != B && end != B && e.start != pi && e.end != pi && intersect(B, p1, start, end))
+            return true;
+    }
+
+    // Same but for already existing triangles
     for(int i = 0; i < elements.size(); i++) {
         auto& e = elements[i];
         Vec2 last_p = nodes[e.points[2]];
         for(int j = 0; j < 3; j++) {
-            if(nodes[e.points[j]] == p1)
+            if(e.points[j] == pi)
                 continue;
 
             Vec2 m_point = nodes[e.points[j]];
@@ -408,25 +502,26 @@ bool TriangleMesh::_CrossesFront(Vec2 p1, int pi, int idx) {
             if(m_point != B && isPointOnLine(B, p1, m_point))
                 return true;
 
-            if(m_point != A && m_point != B && m_point != p1 && edges[idx].start < poly.edges.size() && edges[idx].end >= poly.edges.size() && p1 > 0 && pi < poly.edges.size() && abs(pi - edges[idx].start) < 3) {
-                bool ApX_ccw = ccw(A, m_point, nodes[edges[(idx + 1) % edges.size()].end]);
-                bool ABX_ccw = ccw(A, B, nodes[edges[(idx + 1) % edges.size()].end]);
-
-                if(ApX_ccw != ABX_ccw)
-                    return true;
-            }
-
             last_p = m_point;
         }
     }
+
+    return false;
 }
 
 bool TriangleMesh::_IsLineOccupied(int pi, int idx) {
     int tri_count_A = 0, tri_count_B = 0;
 
-    bool is_A_on_front = edges[idx].start < poly.edges.size() and pi < poly.edges.size() and abs(edges[idx].start - pi) == 1;
-    bool is_B_on_front = edges[idx].end < poly.edges.size() and pi < poly.edges.size() and abs(edges[idx].end - pi) == 1;
+    int mod_n_1 = poly.edges.size() - 1;
 
+    // These 2 variables denote (A and p) or (B and p) are part of the outline (front)
+    bool is_A_on_front = edges[idx].start < poly.edges.size() and pi < poly.edges.size() and
+            (abs(edges[idx].start - pi) == 1 || abs(edges[idx].start - pi) == mod_n_1);
+    bool is_B_on_front = edges[idx].end < poly.edges.size() and pi < poly.edges.size() and
+            (abs(edges[idx].end - pi) == 1 || abs(edges[idx].end - pi) == mod_n_1);
+
+    // Count the number of triangles each edge makes, if it's more than 2 (1 in case of outline edges)
+    // then the line is already occupied
     for(int i = 0; i < elements.size(); i++) {
         auto& e = elements[i];
 
@@ -434,6 +529,10 @@ bool TriangleMesh::_IsLineOccupied(int pi, int idx) {
             tri_count_A += is_A_on_front ? 2 : 1;
         if(e.Contains(edges[idx].end) and e.Contains(pi))
             tri_count_B += is_B_on_front ? 2 : 1;
+
+        // Check if the entire triangle is a duplicate of some other already existing triangle
+        if(e.Contains(edges[idx].start) && e.Contains(edges[idx].end) && e.Contains(pi))
+            return true;
 
         if(tri_count_A >= 2 || tri_count_B >= 2) {
             return true;
@@ -443,42 +542,58 @@ bool TriangleMesh::_IsLineOccupied(int pi, int idx) {
     return false;
 }
 
-int TriangleMesh::_IsPointColliding(Vec2 C, int idx, float radius, float &distance) {
+int TriangleMesh::_CheckPointProximity(Vec2 C, int idx, float radius, float &distance) {
     float best_proxim = 1000000;
     int best_point = -1;
-    bool do_front_check = edges[idx].start < poly.edges.size() and edges[idx].end < poly.edges.size();
 
+    // true if at least one A or B is part of the outline
+    bool do_front_check = edges[idx].start < poly.edges.size() || edges[idx].end < poly.edges.size();
+    int mod_n_1 = poly.edges.size() - 1;
+    GeneralLineFunc AB_line(A, B);
+
+    // Each "subfunction" is defined within its definition
     for(int i = 0; i < nodes.size(); i++) {
         Vec2 p = nodes[i];
         if(p == A || p == B)
             continue;
 
-        if(_CrossesFront(p, i))
+        float dist = p.dist(C);
+        if(dist > radius || dist >= best_proxim)
             continue;
 
-        if(_IsLineOccupied(i))
+        if(abs(GetDistanceFromPointToLine(AB_line, p)) < 0.0001)
+            continue;
+
+        if(_CrossesFront(p, i, idx))
+            continue;
+
+        if(_IsLineOccupied(i, idx))
             continue;
 
         if(do_front_check) {
-            bool c1 = _PointTest((p + A) / 2);
-            bool c2 = _PointTest((p + B) / 2);
-            if(!(c1 && c2)) {
-                continue;
-            }
+            // Check if middle points of edges Ap and Bp are within the polygon
+            // This holds because we are looking for the closest point, meaning there won't be another point that's
+            // in the middle of that edge and nowhere else, because then we would take it instead of the current one
+            // Mostly a sanity check tbh.
+            bool c1 = (abs(edges[idx].start - i) == 1 || abs(edges[idx].start - i) == mod_n_1) || _PointTest((p + A) / 2);
+            if(!c1) continue;
+
+            bool c2 = (abs(edges[idx].end - i) == 1 || abs(edges[idx].end - i) == mod_n_1) || _PointTest((p + B) / 2);
+            if(!c2) continue;
         }
 
-        float dist = p.dist(C);
-        if(dist < radius && dist < best_proxim) {
-            best_proxim = dist;
-            best_point = i;
-        }
+        best_proxim = dist;
+        best_point = i;
     }
 
+    distance = best_proxim;
     return best_point;
 }
 
+// Check if given point p is inside any already created triangles (we don't want that, because that's overlap)
 bool TriangleMesh::_IsInsideMesh(Vec2 p) {
     for(auto & e : elements) {
+        // line: nodes[e.points[0]], nodes[e.points[1]]. Point: p
         float d1 = GetOrientationOfPointsAlongLine(nodes[e.points[0]], nodes[e.points[1]], p);
         float d2 = GetOrientationOfPointsAlongLine(nodes[e.points[1]], nodes[e.points[2]], p);
         float d3 = GetOrientationOfPointsAlongLine(nodes[e.points[2]], nodes[e.points[0]], p);
@@ -491,4 +606,31 @@ bool TriangleMesh::_IsInsideMesh(Vec2 p) {
     }
 
     return false;
+}
+
+void TriangleMesh::Export(const char *pts_file_name, const char *elems_file_name, Vec2 scale, Vec2 offset) {
+    using namespace std;
+
+    // Write points
+    fstream file(pts_file_name, ios_base::out);
+
+    if(!file.good())
+        return;
+
+    file << nodes.size() << '\n';
+
+    for(auto& pos : nodes) {
+        file << ((pos * scale) + offset);
+    }
+
+    file = fstream(elems_file_name, ios_base::out);
+
+    if(!file.good())
+        return;
+
+    file << elements.size() << '\n';
+
+    for(auto& e : elements) {
+        file << e;
+    }
 }

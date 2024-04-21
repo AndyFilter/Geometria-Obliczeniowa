@@ -22,7 +22,7 @@ GeneralLineFunc LineConnectingPointAndLine(GeneralLineFunc& func, Vec2 P1);
 float AngleBetweenPoints(Vec2 p1, Vec2 m, Vec2 p3);
 float AngleBetweenPoints(Vec2* points);
 short GetOrientationOfPointsAlongLine(Vec2 p3, Vec2 p1, Vec2 p2);
-float GetOrientationOfPointsAlongLine(GeneralLineFunc func, Vec2 p1);
+float GetDistanceFromPointToLine(GeneralLineFunc func, Vec2 p1);
 // val < 0 - collinear, val == 0 - clockwise, val > 0 - counter clockwise
 float GetPointsOrientation(Vec2 p, Vec2 q, Vec2 r);
 
