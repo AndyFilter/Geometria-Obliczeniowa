@@ -147,8 +147,9 @@ struct TriangleMesh {
 
     TriangleMesh(const char* pts_file_name, const char* edg_file_name, float r = 10, Vec2 scale = {1,1}, Vec2 offset = {0,0});
     TriangleMesh(const char* pts_file_name, const char* tri_file_name, Vec2 scale = {1,1}, Vec2 offset = {0,0});
+    TriangleMesh() = default;
 
-    void Export(const char* pts_file_name, const char* elems_file_name, Vec2 scale = {1,1}, Vec2 offset = {0,0});
+    void Export(const char* pts_file_name, const char* elems_file_name, bool appy_reverse_transform = true, Vec2 scale = {1,1}, Vec2 offset = {0,0});
 
     void Recalculate(float r, int start_idx = -1);
     void StepCalculations(float r, int& start_idx);
@@ -162,6 +163,7 @@ private:
     std::vector<Edge> edges;
     Vec2 A, B;
     Vec2 _scale;
+    Vec2 _offset;
 
     int _CheckPointProximity(Vec2 C, int idx, float radius, float &distance);
     bool _CrossesFront(Vec2 p1, int pi, int idx);

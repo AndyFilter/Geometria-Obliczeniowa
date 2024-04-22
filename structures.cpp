@@ -254,6 +254,7 @@ TriangleMesh::TriangleMesh(const char *pts_file_name, const char *edg_file_name,
     poly = StructuredPolygon(pts_file_name, edg_file_name, scale, offset);
 
     _scale = scale;
+    _offset = offset;
 
     // Do the algorithm (almost)
     Recalculate(r);
@@ -295,10 +296,8 @@ void TriangleMesh::StepCalculations(float r, int& idx) {
     const float c60 = cosf(60 * M_PI / 180.0);
     const auto front_edges_count = poly.edges.size();
 
-    A = nodes[edges[0].start], B = nodes[edges[0].end];
-
     next_triangle:
-    while(A != B && idx < edges.size() && (idx_cap < 0 || idx < idx_cap)) {
+    while(idx < edges.size() && (idx_cap < 0 || idx < idx_cap)) {
 
         // Check if current points are not already building some other triangle
         // If AB is part of 2 or more triangles (or 1 triangle and the original front)
@@ -322,7 +321,7 @@ void TriangleMesh::StepCalculations(float r, int& idx) {
         A = nodes[edges[idx].start];
         B = nodes[edges[idx].end];
 
-        // Third point that creates the equilateral triangle
+        // Third point that creates the equilateral triangle ABC (or rather ACB I guess...)
         Vec2 C = {c60 * (A.x - B.x) - s60 * (A.y - B.y) + B.x,
                   s60 * (A.x - B.x) + c60 * (A.y - B.y) + B.y };
 
@@ -343,16 +342,15 @@ void TriangleMesh::StepCalculations(float r, int& idx) {
             if(!_PointTest(C_rot)) {
                 float rot_dist = 0;
                 int rot_idx = _CheckPointProximity(C_rot, idx, 999999, rot_dist);
-                //merged_idx = _CheckPointProximity(C, idx, 999999, dist);
-
                 if(rot_idx == -1) {
                     idx += 1;
                     printf("Skipping a triangle (Bounds) [idx: {%i}, edges: (%i, %i)]\n", idx, edges[idx].start, edges[idx].end);
                     continue;
                 }
 
-                //merged_idx = rot_dist < dist ? rot_idx : merged_idx;
-                merged_idx = rot_idx;
+                merged_idx = _CheckPointProximity(C, idx, 999999, dist);
+                merged_idx = rot_dist < dist ? rot_idx : merged_idx; // Choose the "better" triangle
+                //merged_idx = rot_idx;
             }
             else {
                 // New (rotated) point C is within the bounds of the mesh
@@ -454,8 +452,9 @@ bool intersect(Vec2 A, Vec2  B, Vec2 C, Vec2 D) {
 
 // line AB
 bool isPointOnLine(Vec2 A, Vec2  B, Vec2 C) {
-    const float epsilon = 0.001;
-    return -epsilon < (A.dist(C) + C.dist(B) - A.dist(B)) < epsilon;
+    const float epsilon = 0.0001;
+    float val = (A.dist(C) + C.dist(B) - A.dist(B));
+    return -epsilon < val && val < epsilon;
 }
 
 bool TriangleMesh::_CrossesFront(Vec2 p1, int pi, int idx) {
@@ -517,8 +516,17 @@ bool TriangleMesh::_IsLineOccupied(int pi, int idx) {
     // These 2 variables denote (A and p) or (B and p) are part of the outline (front)
     bool is_A_on_front = edges[idx].start < poly.edges.size() and pi < poly.edges.size() and
             (abs(edges[idx].start - pi) == 1 || abs(edges[idx].start - pi) == mod_n_1);
+    if(is_A_on_front)
+        is_A_on_front &= std::any_of(poly.edges.begin(), poly.edges.end(), [&](const Edge &e) {
+            return (e.start == edges[idx].start && e.end == pi) || (e.start == pi && e.end == edges[idx].start);
+        });
+
     bool is_B_on_front = edges[idx].end < poly.edges.size() and pi < poly.edges.size() and
             (abs(edges[idx].end - pi) == 1 || abs(edges[idx].end - pi) == mod_n_1);
+    if(is_B_on_front)
+        is_B_on_front &= std::any_of(poly.edges.begin(), poly.edges.end(), [&](const Edge &e) {
+            return (e.start == edges[idx].end && e.end == pi) || (e.start == pi && e.end == edges[idx].end);
+        });
 
     // Count the number of triangles each edge makes, if it's more than 2 (1 in case of outline edges)
     // then the line is already occupied
@@ -543,8 +551,10 @@ bool TriangleMesh::_IsLineOccupied(int pi, int idx) {
 }
 
 int TriangleMesh::_CheckPointProximity(Vec2 C, int idx, float radius, float &distance) {
-    float best_proxim = 1000000;
+    float best_rating = 1000000; // triangle rating (rates its shape)
     int best_point = -1;
+
+    float AB_dist = A.dist(B);
 
     // true if at least one A or B is part of the outline
     bool do_front_check = edges[idx].start < poly.edges.size() || edges[idx].end < poly.edges.size();
@@ -558,7 +568,8 @@ int TriangleMesh::_CheckPointProximity(Vec2 C, int idx, float radius, float &dis
             continue;
 
         float dist = p.dist(C);
-        if(dist > radius || dist >= best_proxim)
+        float rating = fabs(AB_dist-A.dist(p)); // used to calculate how "good" the triangle is (how close to equilateral it is)
+        if(dist > radius || rating >= best_rating)
             continue;
 
         if(abs(GetDistanceFromPointToLine(AB_line, p)) < 0.0001)
@@ -582,21 +593,23 @@ int TriangleMesh::_CheckPointProximity(Vec2 C, int idx, float radius, float &dis
             if(!c2) continue;
         }
 
-        best_proxim = dist;
+        best_rating = rating;
         best_point = i;
     }
 
-    distance = best_proxim;
+    distance = best_rating;
     return best_point;
 }
+
 
 // Check if given point p is inside any already created triangles (we don't want that, because that's overlap)
 bool TriangleMesh::_IsInsideMesh(Vec2 p) {
     for(auto & e : elements) {
         // line: nodes[e.points[0]], nodes[e.points[1]]. Point: p
-        float d1 = GetOrientationOfPointsAlongLine(nodes[e.points[0]], nodes[e.points[1]], p);
-        float d2 = GetOrientationOfPointsAlongLine(nodes[e.points[1]], nodes[e.points[2]], p);
-        float d3 = GetOrientationOfPointsAlongLine(nodes[e.points[2]], nodes[e.points[0]], p);
+        float d1, d2, d3;
+        d1 = GetOrientationOfPointsAlongLine(nodes[e.points[1]], nodes[e.points[0]], p);
+        d2 = GetOrientationOfPointsAlongLine(nodes[e.points[2]], nodes[e.points[1]], p);
+        d3 = GetOrientationOfPointsAlongLine(nodes[e.points[0]], nodes[e.points[2]], p);
 
         bool has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
         bool has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
@@ -608,7 +621,7 @@ bool TriangleMesh::_IsInsideMesh(Vec2 p) {
     return false;
 }
 
-void TriangleMesh::Export(const char *pts_file_name, const char *elems_file_name, Vec2 scale, Vec2 offset) {
+void TriangleMesh::Export(const char *pts_file_name, const char *elems_file_name, bool appy_reverse_transform, Vec2 scale, Vec2 offset) {
     using namespace std;
 
     // Write points
@@ -620,7 +633,10 @@ void TriangleMesh::Export(const char *pts_file_name, const char *elems_file_name
     file << nodes.size() << '\n';
 
     for(auto& pos : nodes) {
-        file << ((pos * scale) + offset);
+        if(appy_reverse_transform)
+            file << (((pos - _offset) / _scale + offset) * scale);
+        else
+            file << ((pos + offset) * scale);
     }
 
     file = fstream(elems_file_name, ios_base::out);

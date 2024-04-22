@@ -6,7 +6,7 @@ import sys
 import math
 
 THRESHOLD = 8  # 0 -255
-DISTANCE = 80
+DISTANCE = 40
 
 # points from 0 to 2pi used to get points on a circle later
 angles = np.arange(0, 2 * math.pi * DISTANCE, dtype=float) / DISTANCE
@@ -16,7 +16,7 @@ print(angles)
 size = [1, 1]
 
 #img = cv.imread(sys.argv[1] if len(sys.argv) > 1 else 'Hard.png', flags=cv.IMREAD_GRAYSCALE)
-im = Image.open("Outline_amongus.png")
+im = Image.open("Outline_trudny_wariant.png")
 im = ImageOps.grayscale(im)
 
 img = im.load()
@@ -30,8 +30,6 @@ edges = []
 #size_multip = [size_x / size[0], size_y / size[1]]
 
 p = (0, 0)
-
-print(img[52, 127])
 
 def ArePointsClose(p1: np.array, p2: np.array, max_dist) -> bool:
     R = max_dist

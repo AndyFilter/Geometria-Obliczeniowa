@@ -163,8 +163,14 @@ def IsLineOccupied(p1):
 
     is_A_on_front = edges[idx][0] < base_edge_count and p1 < base_edge_count and (
                 abs(edges[idx][0] - p1) == 1 or abs(edges[idx][0] - p1) == mod_n_1)
+    if is_A_on_front:
+        is_A_on_front = any((e[0] == edges[idx][0] and e[1] == p1) or \
+                            (e[0] == p1 and e[1] == edges[idx][0]) for e in front)
     is_B_on_front = edges[idx][1] < base_edge_count and p1 < base_edge_count and (
                 abs(edges[idx][1] - p1) == 1 or abs(edges[idx][1] - p1) == mod_n_1)
+    if is_B_on_front:
+        is_B_on_front = any((e[0] == edges[idx][1] and e[1] == p1) or \
+                            (e[0] == p1 and e[1] == edges[idx][1]) for e in front)
 
     for (i, e) in enumerate(mesh_elements):
         if edges[idx][0] in e and p1 in e:
@@ -193,11 +199,12 @@ def CheckPointProximity(C, radius=r) -> (np.ndarray, int, float):
             continue
 
         dist = np.linalg.norm(p - C)
-        if dist > radius and dist >= best_proxim:
+        if dist > radius or dist >= best_proxim:
             continue
 
         if CrossesFront(p, i):
             continue
+
         if IsLineOccupied(i):
             continue
         # and i < base_edge_count and (np.cross(A, p) * np.cross(A, B) >= 0) and (np.cross(B, p) * np.cross(B, A) >= 0):
@@ -388,7 +395,6 @@ out_file.write(f'{str(len(mesh_elements))}\n')
 out_file.write('\n'.join(f'{x[0]}\t{x[1]}\t{x[2]}' for x in mesh_elements))
 out_file.close()
 
-# Made by Maciej Grzęda. Have fun, shit💩 I didn't do anything, shit💩
 # out_file = open("mesh_edges.dat", mode="w+")
 # out_file.write(f'{str(len(new_edges))}\n')
 # out_file.write('\n'.join(f'{x[0]}\t{x[1]}' for x in new_edges))

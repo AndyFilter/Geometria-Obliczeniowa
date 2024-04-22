@@ -51,8 +51,10 @@ float AngleBetweenPoints(Vec2* points) {
     return AngleBetweenPoints(points[0], points[1], points[2]);
 }
 
-short GetOrientationOfPointsAlongLine(Vec2 l1, Vec2 l2, Vec2 p1) {
+float GetOrientationOfPointsAlongLine(Vec2 l1, Vec2 l2, Vec2 p1) {
+    //return (b.x - a.x)*(c.y - a.y) - (b.y - a.y)*(c.x - a.x)
     return (l2.x - l1.x)*(p1.y - l1.y) - (l2.y - l1.y)*(p1.x - l1.x);
+    //return (p1.x - p3.x)*(p2.y - p3.y) - (p2.x - p3.x)*(p1.y - p3.y);
 }
 
 //short GetDistanceFromPointToLine(Vec2 p3, Vec2 p1, Vec2 p2) {
