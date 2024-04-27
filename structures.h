@@ -10,6 +10,7 @@
 #include <set>
 #include "External/ImGui/imgui.h"
 #include "Helpers.h"
+#include <unordered_set>
 
 #define FLOAT_CMP_PRECISION 0.001f
 
@@ -60,7 +61,7 @@ public:
 inline std::istream& operator>>(std::istream& stream, Vec2 &pos) { stream >> pos.x >> pos.y; return stream;};
 inline std::ostream& operator<<(std::ostream& stream, Vec2 pos) { stream << pos.x << '\t' << pos.y << '\n'; return stream;};
 
-struct Triangle;
+struct Circle;
 
 struct Edge{
     int start = 0, end = 0;
@@ -89,9 +90,9 @@ struct GeneralLineFunc
     // Ax + By + C = 0. (y = - (A/B)x - (C/B))
     GeneralLineFunc(float A, float B, float C) : A(A), B(B), C(C) {};
     GeneralLineFunc(const Vec2 P1, const Vec2 P2) :
-    A(P2.y - P1.y),
-    B(P1.x - P2.x),
-    C(P1.y * (P2.x - P1.x) - (P2.y - P1.y) * P1.x) {};
+            A(P2.y - P1.y),
+            B(P1.x - P2.x),
+            C(P1.y * (P2.x - P1.x) - (P2.y - P1.y) * P1.x) {};
 
     Vec2 GetCollisionPoint(GeneralLineFunc& other) const { float denominator = B*other.A - A*other.B;
         return Vec2(( C*other.B - B*other.C) / denominator, ( A*other.C - C*other.A) / denominator);
@@ -115,6 +116,170 @@ struct DirectionalLineFunc
     };
 };
 
+struct Triangle
+{
+    Vec2 vtx[3] {0};
+    bool is_valid = false;
+
+    Triangle() = default;
+
+    Triangle(GeneralLineFunc f1, GeneralLineFunc f2, GeneralLineFunc f3) {
+        feclearexcept(FE_ALL_EXCEPT);
+
+        vtx[0] = f1.GetCollisionPoint(f2);
+        vtx[1] = f1.GetCollisionPoint(f3);
+        vtx[2] = f2.GetCollisionPoint(f3);
+
+        // If there was a FE_DIVBYZERO (or FE_INVALID) exception the lines don't create a triangle
+        is_valid = !fetestexcept(FE_DIVBYZERO);
+    }
+
+    Triangle(Vec2 p1, Vec2 p2, Vec2 p3) {
+        vtx[0] = p1;
+        vtx[1] = p2;
+        vtx[2] = p3;
+    };
+
+    float GetArea() {
+        float a = vtx[0].dist(vtx[1]), b = vtx[1].dist(vtx[2]), c = vtx[2].dist(vtx[0]);
+        float p = (a+b+c) * 0.5f;
+        return sqrtf(p * (p-a) * (p-b) * (p-c));
+    }
+
+    Rect GetRect() {
+        Rect bb;
+        bb.min.x = std::min_element(vtx, vtx + 3, [](auto a, auto b) {return a.x < b.x;})->x;
+        bb.max.x = std::max_element(vtx, vtx + 3, [](auto a, auto b) {return a.x < b.x;})->x;
+        bb.min.y = std::min_element(vtx, vtx + 3, [](auto a, auto b) {return a.y < b.y;})->y;
+        bb.max.y = std::max_element(vtx, vtx + 3, [](auto a, auto b) {return a.y < b.y;})->y;
+
+        return bb;
+    }
+
+    Vec2 GetMidPos() {
+        return (vtx[0] + vtx[1] + vtx[2]) / 3;
+    }
+
+    inline bool IsContained_Area(Vec2 point) {
+        float S = GetArea();
+        float S1 = Triangle(vtx[0], vtx[1], point).GetArea();
+        float S2 = Triangle(vtx[1], vtx[2], point).GetArea();
+        float S3 = Triangle(vtx[2], vtx[0], point).GetArea();
+        bool is = fabsf(S - (S1 + S2 + S3)) < FLOAT_CMP_PRECISION;
+        return is;
+    }
+
+    inline bool IsContained_Angles(Vec2 point) {
+        float sum = 0;
+        for(int i = 0; i < 3; i++) {
+            sum += AngleBetweenPoints(vtx[i], point, vtx[(i+1) % 3]);
+        }
+        return fabsf(sum - M_PIf * 2) < FLOAT_CMP_PRECISION;
+    }
+
+    void Scale(float scale) {
+        scale -= 1;
+        auto m = GetMidPos();
+
+        vtx[0] = (vtx[0] - m) * scale + vtx[0];
+        vtx[1] = (vtx[1] - m) * scale + vtx[1];
+        vtx[2] = (vtx[2] - m) * scale + vtx[2];
+    }
+};
+
+
+struct PointCloud {
+    struct CloudPoint : public Vec2 {
+        bool include_in_hull = false;
+
+        CloudPoint() = default;
+        CloudPoint(Vec2 pos, bool include = false) : Vec2(pos), include_in_hull(include) {}
+
+        CloudPoint operator=(const CloudPoint& other) { return { {this->x = other.x, this->y = other.y}, other.include_in_hull }; }
+    };
+
+    std::vector<CloudPoint> points;
+    std::vector<int> hull_points; // Separately store indexes of points that build the convex hull
+
+    Rect GetBoundingBox();
+
+    PointCloud(const char* src_file, float scale = 1, Vec2 offset = {0, 0}) {
+        PointCloud(src_file, {scale, scale}, offset);
+    }
+
+    PointCloud(const char* src_file, Vec2 scale = {1, 1}, Vec2 offset = {0, 0},
+               const bool remove_duplicates = false) {
+        using namespace std;
+
+        fstream file(src_file);
+
+        if(!file.good())
+            return;
+
+        size_t size = 0;
+        file >> size;
+
+        points.resize(size);
+
+        //auto cmp_func = [](const Vec2& v1, const Vec2& v2){ return v1.x < v2.x || v1.x == v2.x && v1.y < v2.y; };
+        //auto hash_func = [](const Vec2& v1){ return (size_t)(v1.x * 10000 + v1.y*10); };
+        //using VecHash = std::unordered_set<Vec2, decltype(hash_func), decltype(cmp_func)>;
+        //VecHash point_set = VecHash(size, hash_func, cmp_func);
+
+        CloudPoint point;
+        int idx = 0;
+        while(file >> point.x && file >> point.y &&
+        (!remove_duplicates || std::find(points.begin(), points.end(), point) == points.end())) {
+            points[idx++] = point * scale + offset;
+            //if(remove_duplicates)
+            //    point_set.insert(point);
+        }
+
+        file.close();
+    }
+
+    PointCloud() = default;
+
+
+    bool PointTest(Vec2 p);
+
+    // Jarvis
+    void UpdateConvexHull_Jarvis();
+
+    void QuickHull();
+
+private:
+
+    void QuickHull_rec(int n, int p1, int p2, int side)
+    {
+        int ind = -1;
+        float max_dist = 0;
+
+        for (int i=0; i<n; i++)
+        {
+            float temp = fabsf(GetPointsOrientation(points[p1], points[p2], points[i]));
+            if (sgn(GetPointsOrientation(points[p1], points[p2], points[i])) == side && temp > max_dist)
+            {
+                ind = i;
+                max_dist = temp;
+            }
+        }
+
+        if (ind == -1)
+        {
+            hull_points.push_back(p1);
+            hull_points.push_back(p2);
+            points[p1].include_in_hull = points[p2].include_in_hull = true;
+            return;
+        }
+
+        // Recur for the two parts divided by a[ind]
+        QuickHull_rec(n, ind, p1, -sgn(GetPointsOrientation(points[ind], points[p1], points[p2])));
+        QuickHull_rec(n, ind, p2, -sgn(GetPointsOrientation(points[ind], points[p2], points[p1])));
+    }
+};
+
+
 struct StructuredPolygon{
     std::vector<Vec2> points;
     std::vector<Edge> edges;
@@ -123,24 +288,70 @@ struct StructuredPolygon{
     StructuredPolygon(const char* pts_file_name, const char* egs_file_name, Vec2 scale = {1,1}, Vec2 offset = {0,0});
 };
 
-struct TriangleMesh {
+template<int n = 3>
+struct MeshElement{
+    int points[n]{0};
 
-    template<int n = 3>
-    struct MeshElement{
-        int points[n]{0};
+    MeshElement() = default;
 
-        MeshElement() = default;
+    bool Contains(int node_idx) {
+        return std::find(points, points + n, node_idx) != points + n;
+    }
+    bool ContainsAny(std::initializer_list<int> indices) {
+        return std::find_first_of(points, points + n, indices.begin(), indices.end()) != points + n;
+    }
 
-        bool Contains(int node_idx) {
-            return std::find(points, points + n, node_idx) != points + n;
-        }
+    MeshElement(std::initializer_list<int> elems) {
+        if(elems.size() != n)
+            return;
+        std::copy(elems.begin(), elems.end(), points);
+    }
+};
 
-        MeshElement(std::initializer_list<int> elems) {
-            if(elems.size() != n)
-                return;
-            std::copy(elems.begin(), elems.end(), points);
-        }
+struct MeshStats {
+    int buckets = 10;
+    float mean_triangle_rating;
+    float median_triangle_rating;
+    float min_triangle_rating;
+    float max_triangle_rating;
+    std::vector<float> triangle_ratings;
+    std::vector<float> rating_buckets;
+};
+
+struct TriangulationMesh {
+    enum Triangulate_Method {
+        Triangulate_Delaunay,
+        Triangulate_EdgeFlip
     };
+
+    TriangulationMesh(const char* pts_file_name, Triangulate_Method method, Vec2 scale = {1,1}, Vec2 offset = {0,0}) {
+        TriangulateMesh(pts_file_name, method, scale, offset);
+    }
+    TriangulationMesh() = default;
+
+    void RecalculateMesh(Triangulate_Method method);
+    MeshStats GetMeshStats();
+
+    PointCloud pc;
+    std::vector<MeshElement<3>> elements;
+    Triangle superTriangle;
+
+private:
+    void TriangulateDelaunay();
+    void TriangulateEdgeFlip();
+    Vec2 _scale;
+    Vec2 _offset;
+    MeshStats _mesh_stats;
+    bool _are_stats_dirty = true;
+    Triangle _GenerateSuperTriangle();
+    Triangle _GetTriangleFromElement(MeshElement<3> elem) {
+        return {pc.points[elem.points[0]],pc.points[elem.points[1]],pc.points[elem.points[2]]};
+    }
+
+    void TriangulateMesh(const char* pts_file_name, Triangulate_Method method, Vec2 scale = {1,1}, Vec2 offset = {0,0});
+};
+
+struct TriangleMesh {
 
     std::vector<Vec2> nodes;
     std::vector<MeshElement<3>> elements;
@@ -172,7 +383,7 @@ private:
     bool _PointInsidePolygon(Vec2 p1);
 };
 
-inline std::ostream& operator<<(std::ostream& stream, TriangleMesh::MeshElement<3> &tri) { stream << tri.points[0] << '\t' << tri.points[1] << '\t' << tri.points[2] << '\n'; return stream;};
+inline std::ostream& operator<<(std::ostream& stream, MeshElement<3> &tri) { stream << tri.points[0] << '\t' << tri.points[1] << '\t' << tri.points[2] << '\n'; return stream;};
 
 struct RangeTree1D {
     struct Node {
@@ -238,398 +449,6 @@ private:
     void _Select(Node* node, Vec2 l_bound, Vec2 h_bound);
 };
 
-
-struct PointCloud {
-    struct CloudPoint : public Vec2 {
-        bool include_in_hull = false;
-
-        CloudPoint() = default;
-        CloudPoint(Vec2 pos, bool include = false) : Vec2(pos), include_in_hull(include) {}
-
-        CloudPoint operator=(const CloudPoint& other) { return { {this->x = other.x, this->y = other.y}, other.include_in_hull }; }
-    };
-
-    std::vector<CloudPoint> points;
-    std::vector<int> hull_points; // Separately store indexes of points that build the convex hull
-
-    Rect GetBoundingBox() {
-        Rect res { {FLT_MAX, FLT_MAX}, {-FLT_MAX, -FLT_MAX}};
-        for(auto p : points) {
-            res.min.x = std::fmin(res.min.x, p.x);
-            res.min.y = std::fmin(res.min.y, p.y);
-            res.max.x = std::fmax(res.max.x, p.x);
-            res.max.y = std::fmax(res.max.y, p.y);
-        }
-        return res;
-    }
-
-    PointCloud(const char* src_file, float scale = 1, Vec2 offset = {0, 0}) {
-        using namespace std;
-
-        fstream file(src_file);
-
-        if(!file.good())
-            return;
-
-        size_t size = 0;
-        file >> size;
-
-        points.resize(size);
-
-        CloudPoint point;
-        int idx = 0;
-        while(file >> point.x && file >> point.y) {
-            points[idx++] = point * scale + offset;
-        }
-
-        file.close();
-    }
-
-    PointCloud() = default;
-
-
-    bool PointTest(Vec2 p) {
-        Vec2 lastPoint = points[hull_points[hull_points.size() - 1]];
-
-        int left = 0;
-
-        GeneralLineFunc horizontal_line{0, 1, -p.y};
-
-        //for (int i = 0; i < hull_points.size(); ++i) {
-        for(int i : hull_points) {
-            Vec2 point = points[i];
-
-            if(IsY_OnAABB(point, lastPoint, p.y)) {
-                auto intersect = GeneralLineFunc(point, lastPoint).GetCollisionPoint(horizontal_line);
-
-                // Left side
-                if(intersect.x <= p.x)
-                {
-                    if(fminf(point.y, lastPoint.y) < p.y && fmaxf(point.y, lastPoint.y)  >= p.y)
-                        left++;
-                }
-            }
-
-            lastPoint = point;
-        }
-
-        return left % 2 == 1;
-    }
-
-    // Jarvis
-    void UpdateConvexHull_Jarvis() {
-        if(points.size() < 3)
-            return;
-
-        hull_points.clear();
-
-        int lowest_point_idx = 0;
-        CloudPoint lowest_point_pos = points[lowest_point_idx];
-        for(int i = 0; i < points.size(); i++) {
-            points[i].include_in_hull = false;
-            if(points[i].x <= lowest_point_pos.x) {
-                if(points[i].x == lowest_point_pos.x && points[i].y < lowest_point_pos.y) {
-                    continue;
-                }
-                lowest_point_pos = points[i];
-                lowest_point_idx = i;
-            }
-        }
-
-        int best_idx = lowest_point_idx;
-        GeneralLineFunc line(0,0,0);
-        int last_best;
-        //int count = 0;
-        do {
-            points[best_idx].include_in_hull = true;
-            hull_points.push_back(best_idx);
-
-            last_best = best_idx;
-            best_idx = (best_idx + 1) % points.size();
-            //line = GeneralLineFunc(points[best_idx], points[last_best]);
-            for(int i = 0; i < points.size(); i++) {
-                if(GetPointsOrientation(points[last_best], points[i], points[best_idx]) > 0) {
-                //if(GetDistanceFromPointToLine(line, points[i]) > 0) {
-                    //line = GeneralLineFunc(points[last_best], points[i]);
-                    best_idx = i;
-                }
-            }
-            //count++;
-        } while(best_idx != lowest_point_idx);
-    }
-
-    void QuickHull() {
-        if(points.size() < 3)
-            return;
-
-        hull_points.clear();
-
-        int min_x = 0, max_x = 0, min_y = 0;
-        for (int i=1; i < points.size(); i++)
-        {
-            if (points[i].x < points[min_x].x)
-                min_x = i;
-            if (points[i].x > points[max_x].x)
-                max_x = i;
-            if(points[i].y < points[min_y].y)
-                min_y = i;
-        }
-
-        QuickHull_rec(points.size(), min_x, max_x, 1);
-        QuickHull_rec(points.size(), min_x, max_x, -1);
-
-        Vec2 start = hull_points[0];
-
-        min_x = 0, min_y = 0;
-        Vec2 center;
-        for(int i : hull_points)
-        {
-            if (points[i].x < points[min_x].x)
-                min_x = i;
-            if(points[i].y < points[min_y].y)
-                min_y = i;
-
-            center += points[i];
-        }
-
-        center = center / hull_points.size();
-        start = {(float)min_x, (float)min_y};
-        //p0 = lowest_point_pos;
-
-        //qsort(hull_points.data(), hull_points.size(), angle_compare);
-        std::sort(hull_points.begin(), hull_points.end(), [center, this](auto A, auto B)
-        {
-            Vec2 a = points[A], b = points[B];
-            if (a.x - center.x >= 0 && b.x - center.x < 0)
-                return true;
-            if (a.x - center.x < 0 && b.x - center.x >= 0)
-                return false;
-            if (a.x - center.x == 0 && b.x - center.x == 0) {
-                if (a.y - center.y >= 0 || b.y - center.y >= 0)
-                    return a.y > b.y;
-                return b.y > a.y;
-            }
-
-            // compute the cross product of vectors (center -> a) x (center -> b)
-            float det = (a.x - center.x) * (b.y - center.y) - (b.x - center.x) * (a.y - center.y);
-            if (det < 0)
-                return true;
-            if (det > 0)
-                return false;
-
-            // points a and b are on the same line from the center
-            // check which point is closer to the center
-            float d1 = (a.x - center.x) * (a.x - center.x) + (a.y - center.y) * (a.y - center.y);
-            float d2 = (b.x - center.x) * (b.x - center.x) + (b.y - center.y) * (b.y - center.y);
-            return d1 > d2;
-        });
-    }
-
-    /*
-    void UpdateConvexHull_Monotone() {
-        hull_points.clear();
-
-        for (auto & point : points)
-            point.include_in_hull = false;
-
-        hull_points.resize(points.size() * 2);
-
-        std::sort(points.begin(), points.end(),
-                  [](auto p1, auto p2)
-                  { return (p1.x < p2.x || (p1.x == p2.x && p1.y < p2.y)); });
-
-        int k = 0;
-        // Build lower hull
-        for (int i = 0; i < points.size(); ++i) {
-
-            // If the point at K-1 position is not a part
-            // of hull as vector from ans[k-2] to ans[k-1]
-            // and ans[k-2] to A[i] has a clockwise turn
-            while (k >= 2 && orientation(hull_points[k - 2], hull_points[k - 1], points[i]) <= 0)
-                k--;
-
-            hull_points[k++] = i;
-            points[i].include_in_hull = true;
-        }
-
-        // Build upper hull
-        for (size_t i = points.size() - 1, t = k + 1; i > 0; --i) {
-
-            // If the point at K-1 position is not a part
-            // of hull as vector from ans[k-2] to ans[k-1]
-            // and ans[k-2] to A[i] has a clockwise turn
-            while (k >= t && GetPointsOrientation(hull_points[k - 2], hull_points[k - 1], points[i - 1]) <= 0)
-                k--;
-
-            hull_points[k++] = i - 1;
-            points[i - 1].include_in_hull = true;
-        }
-
-        hull_points.resize(k-1);
-    }
-     */
-
-    //void UpdateConvexHull_Graham(){
-    //    hull_points.clear();
-    //
-    //    int lowest_point_idx = 0;
-    //    CloudPoint lowest_point_pos = points[lowest_point_idx];
-    //    for(int i = 0; i < points.size(); i++) {
-    //        points[i].include_in_hull = false;
-    //        if(points[i].x <= lowest_point_pos.x) {
-    //            if(points[i].x == lowest_point_pos.x && points[i].y < lowest_point_pos.y) {
-    //                continue;
-    //            }
-    //            lowest_point_pos = points[i];
-    //            lowest_point_idx = i;
-    //        }
-    //    }
-    //
-    //    std::swap(points[0], points[lowest_point_idx]);
-    //
-    //    // Sort vertices based on polar angle
-    //    std::sort(points.begin() + 1, points.end(), [lowest_point_pos](CloudPoint a, CloudPoint b)
-    //    {
-    //        CloudPoint A = a - lowest_point_pos, B = b - lowest_point_pos;
-    //        float angle1 = atan2f(A.y, A.x);
-    //        float angle2 = atan2f(B.y, B.x);
-    //
-    //        //if(angle1 == angle2) {
-    //        //    float dist1 = lowest_point_pos.dist(a);
-    //        //    float dist2 = lowest_point_pos.dist(b);
-    //        //
-    //        //    return dist1 < dist2;
-    //        //}
-    //        //else
-    //        return GetPointsOrientation(lowest_point_pos, a, b) > 0;
-    //    });
-    //
-    //    //std::vector<CloudPoint> pts;
-    //    //CloudPoint _last_cp = points[0];
-    //    //pts[0] = _last_cp;
-    //    //std::copy_if(points.begin() + 1, points.end(), pts.begin() + 1, [&_last_cp](CloudPoint a) {
-    //    //    return true;
-    //    //});
-    //
-    //    std::stack<int> stack;
-    //    stack.push(0);
-    //    stack.push(1);
-    //    stack.push(2);
-    //
-    //    for(int i = 1; i < points.size(); i++) {
-    //        int point1 = stack.top(); stack.pop();
-    //        int point2 = stack.top(); stack.push(point1);
-    //        while(stack.size() > 1 && GetPointsOrientation(points[point2], points[point1], points[i]) != 2) {
-    //            stack.pop();
-    //        }
-    //        stack.push(i);
-    //    }
-    //
-    //    hull_points.resize(stack.size());
-    //    int idx = 0;
-    //    while (!stack.empty()) {
-    //        hull_points[idx++] = stack.top();
-    //        stack.pop();
-    //    }
-    //}
-
-private:
-
-    void QuickHull_rec(int n, int p1, int p2, int side)
-    {
-        int ind = -1;
-        float max_dist = 0;
-
-        for (int i=0; i<n; i++)
-        {
-            float temp = fabsf(GetPointsOrientation(points[p1], points[p2], points[i]));
-            if (sgn(GetPointsOrientation(points[p1], points[p2], points[i])) == side && temp > max_dist)
-            {
-                ind = i;
-                max_dist = temp;
-            }
-        }
-
-        if (ind == -1)
-        {
-            hull_points.push_back(p1);
-            hull_points.push_back(p2);
-            points[p1].include_in_hull = points[p2].include_in_hull = true;
-            return;
-        }
-
-        // Recur for the two parts divided by a[ind]
-        QuickHull_rec(n, ind, p1, -sgn(GetPointsOrientation(points[ind], points[p1], points[p2])));
-        QuickHull_rec(n, ind, p2, -sgn(GetPointsOrientation(points[ind], points[p2], points[p1])));
-    }
-
-    /*
-    void UpdateConvexHull_Graham(){
-        hull_points.clear();
-
-        int lowest_point_idx = 0;
-        CloudPoint lowest_point_pos = points[lowest_point_idx];
-        for(int i = 0; i < points.size(); i++) {
-            points[i].include_in_hull = false;
-            if(points[i].x <= lowest_point_pos.x) {
-                if(points[i].x == lowest_point_pos.x && points[i].y < lowest_point_pos.y) {
-                    continue;
-                }
-                lowest_point_pos = points[i];
-                lowest_point_idx = i;
-            }
-        }
-
-        std::swap(points[0], points[lowest_point_idx]);
-
-        // Sort vertices based on polar angle
-        std::sort(points.begin() + 1, points.end(), [lowest_point_pos](CloudPoint a, CloudPoint b)
-        {
-            CloudPoint A = a - lowest_point_pos, B = b - lowest_point_pos;
-            float angle1 = atan2f(A.y, A.x);
-            float angle2 = atan2f(B.y, B.x);
-
-            //if(angle1 == angle2) {
-            //    float dist1 = lowest_point_pos.dist(a);
-            //    float dist2 = lowest_point_pos.dist(b);
-            //
-            //    return dist1 < dist2;
-            //}
-            //else
-            return orientation_glob(lowest_point_pos, a, b) == 2;
-        });
-
-        //std::vector<CloudPoint> pts;
-        //CloudPoint _last_cp = points[0];
-        //pts[0] = _last_cp;
-        //std::copy_if(points.begin() + 1, points.end(), pts.begin() + 1, [&_last_cp](CloudPoint a) {
-        //    return true;
-        //});
-
-        std::stack<int> stack;
-        stack.push(0);
-        stack.push(1);
-        stack.push(2);
-
-        for(int i = 1; i < points.size(); i++) {
-            int point1 = stack.top(); stack.pop();
-            int point2 = stack.top(); stack.push(point1);
-            while(stack.size() > 1 && GetPointsOrientation(points[point2], points[point1], points[i]) != 2) {
-                stack.pop();
-            }
-            stack.push(i);
-        }
-
-        hull_points.resize(stack.size());
-        int idx = 0;
-        while (!stack.empty()) {
-            hull_points[idx++] = stack.top();
-            stack.pop();
-        }
-    }
-     */
-};
-
 template<typename Ty>
 struct EulerObject {
     explicit EulerObject(Ty obj) : obj(obj) {}
@@ -649,6 +468,7 @@ struct Polygon
 {
     std::vector<Vec2> vtx;
 
+    Polygon() = default;
     Polygon(std::initializer_list<Vec2> vertices) {
         vtx.resize(vertices.size());
         std::copy(vertices.begin(), vertices.end(), vtx.begin());
@@ -664,6 +484,10 @@ struct Polygon
         auto start_idx = vtx.size() - 1;
         Vec2 mid_point = (vtx[start_idx] + vtx[0]) / 2;
         vtx.push_back(mid_point);
+    }
+
+    void AddVertex(Vec2 p) {
+        vtx.push_back(p);
     }
 
     bool PointTest(Vec2 p) {
@@ -699,66 +523,13 @@ struct Polygon
     }
 };
 
-struct Triangle
-{
-    Vec2 vtx[3] {0};
-    bool is_valid = false;
+struct Circle {
+    Vec2 pos = {0,0};
+    float R = 0;
 
-    Triangle() = default;
-
-    Triangle(GeneralLineFunc f1, GeneralLineFunc f2, GeneralLineFunc f3) {
-        feclearexcept(FE_ALL_EXCEPT);
-
-        vtx[0] = f1.GetCollisionPoint(f2);
-        vtx[1] = f1.GetCollisionPoint(f3);
-        vtx[2] = f2.GetCollisionPoint(f3);
-
-        // If there was a FE_DIVBYZERO (or FE_INVALID) exception the lines don't create a triangle
-        is_valid = !fetestexcept(FE_DIVBYZERO);
-    }
-
-    Triangle(Vec2 p1, Vec2 p2, Vec2 p3) {
-        vtx[0] = p1;
-        vtx[1] = p2;
-        vtx[2] = p3;
-    };
-
-    float GetArea() {
-        float a = vtx[0].dist(vtx[1]), b = vtx[1].dist(vtx[2]), c = vtx[2].dist(vtx[0]);
-        float p = (a+b+c) * 0.5f;
-        return sqrtf(p * (p-a) * (p-b) * (p-c));
-    }
-
-    Rect GetRect() {
-        Rect bb;
-        bb.min.x = std::min_element(vtx, vtx + 3, [](auto a, auto b) {return a.x < b.x;})->x;
-        bb.max.x = std::max_element(vtx, vtx + 3, [](auto a, auto b) {return a.x < b.x;})->x;
-        bb.min.y = std::min_element(vtx, vtx + 3, [](auto a, auto b) {return a.y < b.y;})->y;
-        bb.max.y = std::max_element(vtx, vtx + 3, [](auto a, auto b) {return a.y < b.y;})->y;
-
-        return bb;
-    }
-
-    Vec2 GetMidPos() {
-        return (vtx[0] + vtx[1] + vtx[2]) / 3;
-    }
-
-    inline bool IsContained_Area(Vec2 point) {
-        float S = GetArea();
-        float S1 = Triangle(vtx[0], vtx[1], point).GetArea();
-        float S2 = Triangle(vtx[1], vtx[2], point).GetArea();
-        float S3 = Triangle(vtx[2], vtx[0], point).GetArea();
-        bool is = fabsf(S - (S1 + S2 + S3)) < FLOAT_CMP_PRECISION;
-        return is;
-    }
-
-    inline bool IsContained_Angles(Vec2 point) {
-        float sum = 0;
-        for(int i = 0; i < 3; i++) {
-            sum += AngleBetweenPoints(vtx[i], point, vtx[(i+1) % 3]);
-        }
-        return fabsf(sum - M_PIf * 2) < FLOAT_CMP_PRECISION;
-    }
+    bool ContainsPoint(Vec2 p) const {return pos.dist(p) <= R; }
+    Circle(Vec2 pos, float radius) : pos(pos), R(radius) {};
+    Circle() = default;
 };
 
 struct LineFunc

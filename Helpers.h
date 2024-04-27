@@ -5,6 +5,8 @@
 
 struct Vec2;
 struct GeneralLineFunc;
+struct Triangle;
+struct Circle;
 
 #ifndef LAB01_HELPERS_H
 #define LAB01_HELPERS_H
@@ -25,5 +27,6 @@ float GetOrientationOfPointsAlongLine(Vec2 p3, Vec2 p1, Vec2 p2);
 float GetDistanceFromPointToLine(GeneralLineFunc func, Vec2 p1);
 // val < 0 - collinear, val == 0 - clockwise, val > 0 - counter clockwise
 float GetPointsOrientation(Vec2 p, Vec2 q, Vec2 r);
+Circle GetTriangleCircumscribedCircle(Triangle tri);
 
 #endif //LAB01_HELPERS_H

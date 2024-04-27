@@ -1,4 +1,153 @@
+#include <unordered_set>
 #include "structures.h"
+
+bool PointCloud::PointTest(Vec2 p) {
+    Vec2 lastPoint = points[hull_points[hull_points.size() - 1]];
+
+    int left = 0;
+
+    GeneralLineFunc horizontal_line{0, 1, -p.y};
+
+    //for (int i = 0; i < hull_points.size(); ++i) {
+    for(int i : hull_points) {
+        Vec2 point = points[i];
+
+        if(IsY_OnAABB(point, lastPoint, p.y)) {
+            auto intersect = GeneralLineFunc(point, lastPoint).GetCollisionPoint(horizontal_line);
+
+            // Left side
+            if(intersect.x <= p.x)
+            {
+                if(fminf(point.y, lastPoint.y) < p.y && fmaxf(point.y, lastPoint.y)  >= p.y)
+                    left++;
+            }
+        }
+
+        lastPoint = point;
+    }
+
+    return left % 2 == 1;
+}
+
+void PointCloud::UpdateConvexHull_Jarvis() {
+    if(points.size() < 3)
+        return;
+
+    hull_points.clear();
+
+    int lowest_point_idx = 0;
+    CloudPoint lowest_point_pos = points[lowest_point_idx];
+    for(int i = 0; i < points.size(); i++) {
+        points[i].include_in_hull = false;
+        if(points[i].x <= lowest_point_pos.x) {
+            if(points[i].x == lowest_point_pos.x && points[i].y < lowest_point_pos.y) {
+                continue;
+            }
+            lowest_point_pos = points[i];
+            lowest_point_idx = i;
+        }
+    }
+
+    int best_idx = lowest_point_idx;
+    GeneralLineFunc line(0,0,0);
+    int last_best;
+    //int count = 0;
+    do {
+        points[best_idx].include_in_hull = true;
+        hull_points.push_back(best_idx);
+
+        last_best = best_idx;
+        best_idx = (best_idx + 1) % points.size();
+        //line = GeneralLineFunc(points[best_idx], points[last_best]);
+        for(int i = 0; i < points.size(); i++) {
+            if(GetPointsOrientation(points[last_best], points[i], points[best_idx]) > 0) {
+                //if(GetDistanceFromPointToLine(line, points[i]) > 0) {
+                //line = GeneralLineFunc(points[last_best], points[i]);
+                best_idx = i;
+            }
+        }
+        //count++;
+    } while(best_idx != lowest_point_idx);
+}
+
+void PointCloud::QuickHull() {
+    if(points.size() < 3)
+        return;
+
+    hull_points.clear();
+
+    int min_x = 0, max_x = 0, min_y = 0;
+    for (int i=1; i < points.size(); i++)
+    {
+        if (points[i].x < points[min_x].x)
+            min_x = i;
+        if (points[i].x > points[max_x].x)
+            max_x = i;
+        if(points[i].y < points[min_y].y)
+            min_y = i;
+    }
+
+    QuickHull_rec(points.size(), min_x, max_x, 1);
+    QuickHull_rec(points.size(), min_x, max_x, -1);
+
+    Vec2 start = hull_points[0];
+
+    min_x = 0, min_y = 0;
+    Vec2 center;
+    for(int i : hull_points)
+    {
+        if (points[i].x < points[min_x].x)
+            min_x = i;
+        if(points[i].y < points[min_y].y)
+            min_y = i;
+
+        center += points[i];
+    }
+
+    center = center / hull_points.size();
+    start = {(float)min_x, (float)min_y};
+    //p0 = lowest_point_pos;
+
+    //qsort(hull_points.data(), hull_points.size(), angle_compare);
+    std::sort(hull_points.begin(), hull_points.end(), [center, this](auto A, auto B)
+    {
+        Vec2 a = points[A], b = points[B];
+        if (a.x - center.x >= 0 && b.x - center.x < 0)
+            return true;
+        if (a.x - center.x < 0 && b.x - center.x >= 0)
+            return false;
+        if (a.x - center.x == 0 && b.x - center.x == 0) {
+            if (a.y - center.y >= 0 || b.y - center.y >= 0)
+                return a.y > b.y;
+            return b.y > a.y;
+        }
+
+        // compute the cross product of vectors (center -> a) x (center -> b)
+        float det = (a.x - center.x) * (b.y - center.y) - (b.x - center.x) * (a.y - center.y);
+        if (det < 0)
+            return true;
+        if (det > 0)
+            return false;
+
+        // points a and b are on the same line from the center
+        // check which point is closer to the center
+        float d1 = (a.x - center.x) * (a.x - center.x) + (a.y - center.y) * (a.y - center.y);
+        float d2 = (b.x - center.x) * (b.x - center.x) + (b.y - center.y) * (b.y - center.y);
+        return d1 > d2;
+    });
+}
+
+Rect PointCloud::GetBoundingBox() {
+    Rect res { {FLT_MAX, FLT_MAX}, {-FLT_MAX, -FLT_MAX}};
+    for(auto p : points) {
+        res.min.x = std::fmin(res.min.x, p.x);
+        res.min.y = std::fmin(res.min.y, p.y);
+        res.max.x = std::fmax(res.max.x, p.x);
+        res.max.y = std::fmax(res.max.y, p.y);
+    }
+    return res;
+}
+
 
 RangeTree1D::RangeTree1D(float *beg, float *end) {
     auto n = (end - beg);
@@ -649,4 +798,211 @@ void TriangleMesh::Export(const char *pts_file_name, const char *elems_file_name
     for(auto& e : elements) {
         file << e;
     }
+}
+
+void TriangulationMesh::TriangulateMesh(const char *pts_file_name, TriangulationMesh::Triangulate_Method method,
+                                   Vec2 scale, Vec2 offset) {
+    pc = PointCloud(pts_file_name, scale, offset, true);
+
+    // Generate the super triangle
+    superTriangle = _GenerateSuperTriangle();
+
+    // Add the super triangle points to the points array
+    pc.points.insert(pc.points.begin(), superTriangle.vtx, superTriangle.vtx + 3);
+    elements.push_back({0,1,2});
+
+    _scale = scale;
+    _offset = offset;
+
+    _are_stats_dirty = true;
+
+    if(method == Triangulate_Delaunay)
+        TriangulateDelaunay();
+}
+
+void TriangulationMesh::RecalculateMesh(Triangulate_Method method) {
+    elements.clear();
+
+    if(method == Triangulate_Delaunay) {
+        // First 3 points are the super triangle
+        superTriangle = _GenerateSuperTriangle();
+        std::copy(pc.points.begin(), pc.points.begin() + 3, superTriangle.vtx);
+        elements.push_back({0,1,2});
+
+        TriangulateDelaunay();
+    }
+    else if(method == Triangulate_EdgeFlip)
+        TriangulateEdgeFlip();
+}
+
+// [< O(n^3)]
+void TriangulationMesh::TriangulateDelaunay() {
+    // [O(n)]
+    for(int i = 0; i < pc.points.size(); i++) {
+        Vec2 p = pc.points[i];
+
+        std::unordered_set<int> bad_tris;
+
+        // Check if point is inside the circles of other triangles [O(n)]
+        for(int j = 0; j < elements.size(); j++) {
+            auto& elem = elements[j];
+            auto tri = _GetTriangleFromElement(elem); // convert element to a triangle
+            auto c = GetTriangleCircumscribedCircle(tri); // get the circle built on that triangle
+            if(c.ContainsPoint(p)) {
+                bad_tris.insert(j);
+            }
+        }
+
+        //StructuredPolygon bad_poly;
+        std::vector<Edge> bad_poly;
+
+        for(int tri_idx : bad_tris) {       // [O(n)]
+            //if(elements[tri_idx].points[0] == -1) continue;
+            int last_idx = elements[tri_idx].points[2]; // take the last point to make an edges from the triangle
+            for(int idx : elements[tri_idx].points) {       // [O(3)]
+                bool is_occupied = false;
+                // Check if any other "bad" triangles contain this edge (idx - last_idx)
+                for(int other_idx : bad_tris) {     // [O(n)]
+                    if(tri_idx == other_idx) continue;
+                    if(elements[other_idx].Contains(idx) && elements[other_idx].Contains(last_idx)) {
+                        is_occupied = true;
+                        break;
+                    }
+                }
+                // No "bad" triangle contains this edge
+                if(!is_occupied) {
+                    bad_poly.emplace_back(idx, last_idx);
+                }
+
+                last_idx = idx;
+            }
+        }
+
+        // Remove triangles that are "bad" from the end vector
+        // this is really bad...
+        int _t_idx = 0;
+        elements.erase(std::remove_if(elements.begin(), elements.end(),
+                                      [&bad_tris, &_t_idx] (MeshElement<3> _)
+                                      { return bad_tris.find(_t_idx++) != bad_tris.end(); }),
+                       elements.end());
+
+        // Construct triangles from the bad polys and the new point
+        //elements.resize(elements.size() + bad_poly.size());
+        //std::transform(bad_poly.end(), bad_poly.end(), std::back_inserter(elements),
+        //               [i](const auto& e) {return MeshElement<3>({e.start, i, e.end});});
+        for(auto& e : bad_poly)
+            elements.push_back( { e.start, i, e.end } );
+    }
+
+    // Remove all the triangles that connect to the super triangle (0,1,2)
+    elements.erase(std::remove_if(elements.begin(), elements.end(),
+                                  [] (MeshElement<3>& elem)
+                                  { return elem.ContainsAny({0,1,2}); }
+    ), elements.end());
+
+    _are_stats_dirty = true;
+
+    // Recalculate mesh stats
+    //GetMeshStats();
+}
+
+Triangle TriangulationMesh::_GenerateSuperTriangle() {
+    Triangle tri;
+
+    /*
+    //Vec2 top_most = {-FLT_MAX, -FLT_MAX}, bottom_most = {FLT_MAX, FLT_MAX}, left_most = {FLT_MAX, FLT_MAX}, right_most = {-FLT_MAX, -FLT_MAX};
+    Vec2 M; // middle point
+
+    for(const auto & p : pc.points) {
+    //    if(p.y > top_most.y)
+    //        top_most = p;
+    //    if(p.y < bottom_most.y)
+    //        bottom_most = p;
+    //    if(p.x > right_most.x)
+    //        right_most = p;
+    //    if(p.x < left_most.x)
+    //        left_most = p;
+
+        M += p;
+    }
+
+    M = M / (float)pc.points.size();
+
+    // Use only the furthest :3 points
+    //Vec2 points[4] = {top_most, bottom_most, left_most, right_most};
+    //std::sort(points, points + 4, [M](Vec2 e1, Vec2 e2) {return M.dist(e1) > M.dist(e2);});
+    //std::copy(points, points + 3, tri.vtx);
+     */
+
+    // Create triangle from the bounding box (from the middle points of 2 edges and the bottom-left corner)
+    auto bb = pc.GetBoundingBox();
+    tri.vtx[0] = Vec2((bb.max.x + bb.min.x) / 2, bb.max.y);
+    tri.vtx[1] = bb.min;
+    tri.vtx[2] = Vec2(bb.max.x, (bb.max.y + bb.min.y) / 2);
+
+RescaleSuperTri:
+    for(const auto & p : pc.points) {
+        if(!tri.IsContained_Angles(p)) {
+            tri.Scale(1.5);
+            goto RescaleSuperTri;
+        }
+    }
+
+    tri.Scale(1.1);
+
+    return tri;
+}
+
+MeshStats TriangulationMesh::GetMeshStats() {
+    if(!_are_stats_dirty || elements.empty())
+        return _mesh_stats;
+
+    _mesh_stats.triangle_ratings.clear();
+    _mesh_stats.rating_buckets = std::vector<float>(_mesh_stats.buckets, 0);
+    double rating_sum = 0;
+
+    // Recalculate mesh stats
+    for(auto& tri : elements) {
+        float longest_side = 0;
+        float shortest_side = FLT_MAX;
+
+        // Shortest edge divided by the longest edge
+        float rating = 0;
+        for(int i = 0; i < 3; i++) {
+            float dst = pc.points[tri.points[i]].dist(pc.points[tri.points[(i + 1) % 3]]);
+            if(dst > longest_side) {
+                rating -= longest_side;
+                longest_side = dst;
+            }
+            shortest_side = fmin(shortest_side, dst);
+            rating += dst;
+        }
+
+        rating = shortest_side / longest_side;
+
+        int bucket_idx = (int)(_mesh_stats.buckets * rating);
+        _mesh_stats.rating_buckets[bucket_idx]++;
+        rating_sum += rating;
+
+        _mesh_stats.triangle_ratings.push_back(rating);
+    }
+
+    // Use for relative data
+    //for(auto& r : _mesh_stats.rating_buckets)
+    //    r /= elements.size();
+
+    std::sort(_mesh_stats.triangle_ratings.begin(), _mesh_stats.triangle_ratings.end());
+    _mesh_stats.median_triangle_rating = _mesh_stats.triangle_ratings[elements.size()/2];
+    _mesh_stats.mean_triangle_rating = rating_sum / elements.size();
+    _mesh_stats.min_triangle_rating = _mesh_stats.triangle_ratings[0];
+    _mesh_stats.max_triangle_rating = _mesh_stats.triangle_ratings[_mesh_stats.triangle_ratings.size()-1];
+
+    _are_stats_dirty = false;
+
+    return _mesh_stats;
+}
+
+
+void TriangulationMesh::TriangulateEdgeFlip() {
+
 }

@@ -71,3 +71,26 @@ float GetPointsOrientation(Vec2 p, Vec2 q, Vec2 r) {
 
     return val;
 }
+
+// Rotates a vector by 90 deg, I have no idea whether it's ccw or cw ^^
+Vec2 RotateVector90(Vec2 v, bool ccw = false) {
+    return ccw ? Vec2(v.y, -v.x) : Vec2(-v.y, v.x) ;
+}
+
+Circle GetTriangleCircumscribedCircle(Triangle tri) {
+    // Get vectors between 2 lines rotated by 90 deg
+    auto vR1 = RotateVector90(tri.vtx[0] - tri.vtx[1]);
+    auto vR2 = RotateVector90(tri.vtx[0] - tri.vtx[2]);
+
+    // Get lines that connect middle points of that lines with the middle points + the vector
+    GeneralLineFunc l1(vR1 + (tri.vtx[0] + tri.vtx[1]) / 2, (tri.vtx[0] + tri.vtx[1]) / 2);
+    GeneralLineFunc l2(vR2 + (tri.vtx[0] + tri.vtx[2]) / 2, (tri.vtx[0] + tri.vtx[2]) / 2);
+
+    Circle c;
+
+    // Get the intersection points of these 2 lines
+    c.pos = l1.GetCollisionPoint(l2);
+    c.R = c.pos.dist(tri.vtx[0]);
+
+    return c;
+}
