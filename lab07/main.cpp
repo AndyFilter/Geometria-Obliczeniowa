@@ -24,7 +24,7 @@ uint64_t micros()
 #endif
 }
 
-bool True = true;
+char* meshes[] = {"../points.dat", "../Export/mesh_points_1.dat", "../Export/mesh_points_2.dat", "../Export/mesh_points_3.dat", "../Export/mesh_points_4.dat"};
 
 int OnGui()
 {
@@ -91,12 +91,18 @@ int OnGui()
 
         if(ImGui::BeginTabItem("Delaunay")) {
 
-            static TriangulationMesh mesh("../points.dat", TriangulationMesh::Triangulate_Delaunay);
+            static TriangulationMesh::Triangulate_Method method = TriangulationMesh::Triangulate_Delaunay;
+            static int selected_mesh = 0;
+            static TriangulationMesh mesh(meshes[selected_mesh], method);
+            static bool show_rating = false;
 
             static float time_taken = 0;
 
             static Vec2* dragging_point = nullptr;
             static bool dirty = true;
+            static bool full_rebuild = false;
+
+            static bool real_time = false;
 
             if(!ImGui::IsMouseDown(0))
                 dragging_point = nullptr;
@@ -105,6 +111,30 @@ int OnGui()
             if(ImGui::BeginChild("Parameters", {500, -1}, ImGuiChildFlags_Border)) {
 
                 ImGui::SeparatorText("Parametry");
+
+                if(ImGui::Combo("Metoda", (int*)&method, "Delaunay\0Delaunay + Wygładzanie\0")) {
+                    dirty = true;
+                    full_rebuild = true;
+                }
+
+                if(ImGui::Combo("Zbiór punktów", &selected_mesh, meshes, sizeof(meshes) / sizeof(char*))) {
+                    full_rebuild = true;
+                }
+
+                ImGui::BeginDisabled(method == TriangulationMesh::Triangulate_Delaunay);
+                if(ImGui::Checkbox("Używaj dystansu", &mesh.use_distance))
+                    full_rebuild = true;
+                ImGui::EndDisabled();
+
+                if(ImGui::Button("Oblicz ponownie"))
+                    dirty = true;
+                    //mesh.RecalculateMesh(method);
+                if(ImGui::IsItemHovered() && ImGui::IsMouseClicked(0, true) && !ImGui::IsItemClicked(0))
+                    dirty = true;
+
+                ImGui::Checkbox("Pokaż Rating", &show_rating);
+
+                ImGui::Checkbox("Realtime", &real_time);
 
                 ImGui::SeparatorText("Wynik");
 
@@ -125,13 +155,17 @@ int OnGui()
             }
             ImGui::EndChild();
 
-            if(dirty) {
+            if(dirty || full_rebuild) {
 
-                if(!dragging_point) {
+                if(!dragging_point || real_time) {
+                    if(full_rebuild)
+                        mesh.TriangulateMesh(meshes[selected_mesh], method);
                     auto start = micros();
-                    mesh.RecalculateMesh(TriangulationMesh::Triangulate_Delaunay);
+                    mesh.RecalculateMesh(method);
                     time_taken = (micros() - start) / 1000.f;
                 }
+
+                full_rebuild = false;
 
                 dirty = false;
             }
@@ -159,9 +193,16 @@ int OnGui()
                     Vec2 pos2 = ImGui::Local2Canvas(mesh.pc.points[e.points[1]], avail, startPos);
                     Vec2 pos3 = ImGui::Local2Canvas(mesh.pc.points[e.points[2]], avail, startPos);
 
-                    dl->AddLine(pos1, pos2, LINE_BASE_COLOR, 1);
-                    dl->AddLine(pos2, pos3, LINE_BASE_COLOR, 1);
-                    dl->AddLine(pos3, pos1, LINE_BASE_COLOR, 1);
+                    if(!show_rating) {
+                        dl->AddLine(pos1, pos2, LINE_BASE_COLOR, 1);
+                        dl->AddLine(pos2, pos3, LINE_BASE_COLOR, 1);
+                        dl->AddLine(pos3, pos1, LINE_BASE_COLOR, 1);
+                    }
+
+                    //Vec2 m = (pos1 + pos2 + pos3) / 3;
+                    //char _buf[14];
+                    //sprintf(_buf, "%.2f", mesh.GetMeshStats().triangle_ratings[i]);
+                    //dl->AddText(m, LINE_SPECIAL_COLOR, _buf);
 
                     dl->PathLineTo(pos1);
                     dl->PathLineTo(pos2);
@@ -170,18 +211,24 @@ int OnGui()
                     //dl->PathFillConvex(ImColor::HSV((60 + (mesh.GetMeshStats().triangle_ratings[i] * 40))/255, 100/255.f, 87/255.f));
                     //dl->PathFillConvex(ImLerp(ImColor(255, 0, 0, 255), ImColor(0, 255, 0, 255), mesh.GetMeshStats().triangle_ratings[i]));
                     //dl->PathFillConvex(ImColor(mesh.GetMeshStats().triangle_ratings[i], 0.f, 0.f, 0.5f));
-                    //dl->PathFillConvex(ImColor::HSV(0/360.f, 45/100.f, mesh.GetMeshStats().triangle_ratings[i]));
-                    dl->PathFillConvex(SHAPE_FILL_COLOR);
+                    if(show_rating)
+                        //dl->PathFillConvex(ImColor(mesh.GetMeshStats().triangle_ratings[i], 0.f, 0.f, 0.5f));
+                        dl->PathFillConvex(ImColor::HSV(0/360.f, 45/100.f, mesh.GetMeshStats().triangle_ratings[i]));
+                    else
+                        dl->PathFillConvex(SHAPE_FILL_COLOR);
                 }
 
                 // Skip first 3 points (super triangle)
-                for(int i = 2; i < mesh.pc.points.size(); i++) {
-                    Vec2& p = mesh.pc.points[i];
-                    auto pos = ImGui::Local2Canvas(p, avail, startPos);
-                    if(ImGui::DrawPoint(pos, "", dl, POINT_BASE_RADIUS - 1) && ImGui::IsMouseClicked(0))
-                        dragging_point = &p;
-                    //dl->AddCircleFilled(pos, POINT_BASE_RADIUS, POINT_BASE_COLOR);
-                }
+                if(!show_rating)
+                    for(int i = 2; i < mesh.pc.points.size(); i++) {
+                        Vec2& p = mesh.pc.points[i];
+                        auto pos = ImGui::Local2Canvas(p, avail, startPos);
+                        //char _buf[12];
+                        //sprintf(_buf, "%i", i);
+                        if(ImGui::DrawPoint(pos, "", dl, POINT_BASE_RADIUS - 2) && ImGui::IsMouseClicked(0))
+                            dragging_point = &p;
+                        //dl->AddCircleFilled(pos, POINT_BASE_RADIUS, POINT_BASE_COLOR);
+                    }
 
                 if(dragging_point) {
                     *dragging_point = ImGui::Canvas2Local(ImGui::GetMousePos(), avail, startPos).Clamp(-10, 10);

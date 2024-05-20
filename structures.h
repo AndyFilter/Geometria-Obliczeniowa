@@ -81,6 +81,8 @@ struct Rect {
         return  point.x >= min.x && point.x <= max.x &&
                 point.y >= min.y && point.y <= max.y;
     }
+
+    float GetArea() {return (max.x - min.x) * (max.y - min.y);}
 };
 
 struct GeneralLineFunc
@@ -201,7 +203,7 @@ struct PointCloud {
     std::vector<CloudPoint> points;
     std::vector<int> hull_points; // Separately store indexes of points that build the convex hull
 
-    Rect GetBoundingBox();
+    Rect GetBoundingBox(int starting_idx = 0);
 
     PointCloud(const char* src_file, float scale = 1, Vec2 offset = {0, 0}) {
         PointCloud(src_file, {scale, scale}, offset);
@@ -240,6 +242,18 @@ struct PointCloud {
 
     PointCloud() = default;
 
+    // Shoelace formula. Might be wrong
+    float GetHullArea() {
+        if(hull_points.empty()) return 0;
+        float sum = 0;
+        Vec2& last_p = points[hull_points.back()];
+        for(int i : hull_points) {
+            Vec2& p = points[i];
+            sum += p.x * last_p.y - (last_p.x * p.y);
+            last_p = p;
+        }
+        return sum * 0.5f;
+    }
 
     bool PointTest(Vec2 p);
 
@@ -321,7 +335,7 @@ struct MeshStats {
 struct TriangulationMesh {
     enum Triangulate_Method {
         Triangulate_Delaunay,
-        Triangulate_EdgeFlip
+        Triangulate_DelaunayWeighted
     };
 
     TriangulationMesh(const char* pts_file_name, Triangulate_Method method, Vec2 scale = {1,1}, Vec2 offset = {0,0}) {
@@ -336,9 +350,16 @@ struct TriangulationMesh {
     std::vector<MeshElement<3>> elements;
     Triangle superTriangle;
 
+    // For DelaunayWeighted only!
+    bool use_distance = false;
+    Rect bb;
+    int iter_count = 1;
+
+    void TriangulateMesh(const char* pts_file_name, Triangulate_Method method, Vec2 scale = {1,1}, Vec2 offset = {0,0});
+
 private:
     void TriangulateDelaunay();
-    void TriangulateEdgeFlip();
+    void TriangulateWeighted();
     Vec2 _scale;
     Vec2 _offset;
     MeshStats _mesh_stats;
@@ -347,8 +368,6 @@ private:
     Triangle _GetTriangleFromElement(MeshElement<3> elem) {
         return {pc.points[elem.points[0]],pc.points[elem.points[1]],pc.points[elem.points[2]]};
     }
-
-    void TriangulateMesh(const char* pts_file_name, Triangulate_Method method, Vec2 scale = {1,1}, Vec2 offset = {0,0});
 };
 
 struct TriangleMesh {

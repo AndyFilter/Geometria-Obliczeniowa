@@ -1,4 +1,7 @@
 #include <unordered_set>
+#include <unordered_map>
+#include <map>
+
 #include "structures.h"
 
 bool PointCloud::PointTest(Vec2 p) {
@@ -137,9 +140,11 @@ void PointCloud::QuickHull() {
     });
 }
 
-Rect PointCloud::GetBoundingBox() {
+
+Rect PointCloud::GetBoundingBox(int starting_idx) {
     Rect res { {FLT_MAX, FLT_MAX}, {-FLT_MAX, -FLT_MAX}};
-    for(auto p : points) {
+    for(int i = starting_idx; i < points.size(); i++) {
+        Vec2& p = points[i];
         res.min.x = std::fmin(res.min.x, p.x);
         res.min.y = std::fmin(res.min.y, p.y);
         res.max.x = std::fmax(res.max.x, p.x);
@@ -147,7 +152,6 @@ Rect PointCloud::GetBoundingBox() {
     }
     return res;
 }
-
 
 RangeTree1D::RangeTree1D(float *beg, float *end) {
     auto n = (end - beg);
@@ -398,6 +402,7 @@ TriangleMesh::TriangleMesh(const char *pts_file_name, const char *tri_file_name,
     }
 }
 
+
 TriangleMesh::TriangleMesh(const char *pts_file_name, const char *edg_file_name, float r, Vec2 scale, Vec2 offset) {
     // Create a polygon from points and edges first
     poly = StructuredPolygon(pts_file_name, edg_file_name, scale, offset);
@@ -436,7 +441,6 @@ void TriangleMesh::Recalculate(float r, int start_idx) {
 
     StepCalculations(r, idx);
 }
-
 
 // Advancing front algorithm
 void TriangleMesh::StepCalculations(float r, int& idx) {
@@ -699,6 +703,7 @@ bool TriangleMesh::_IsLineOccupied(int pi, int idx) {
     return false;
 }
 
+
 int TriangleMesh::_CheckPointProximity(Vec2 C, int idx, float radius, float &distance) {
     float best_rating = 1000000; // triangle rating (rates its shape)
     int best_point = -1;
@@ -749,7 +754,6 @@ int TriangleMesh::_CheckPointProximity(Vec2 C, int idx, float radius, float &dis
     distance = best_rating;
     return best_point;
 }
-
 
 // Check if given point p is inside any already created triangles (we don't want that, because that's overlap)
 bool TriangleMesh::_IsInsideMesh(Vec2 p) {
@@ -802,7 +806,8 @@ void TriangleMesh::Export(const char *pts_file_name, const char *elems_file_name
 
 void TriangulationMesh::TriangulateMesh(const char *pts_file_name, TriangulationMesh::Triangulate_Method method,
                                    Vec2 scale, Vec2 offset) {
-    pc = PointCloud(pts_file_name, scale, offset, true);
+
+    pc = PointCloud(pts_file_name, scale, offset, false);
 
     // Generate the super triangle
     superTriangle = _GenerateSuperTriangle();
@@ -816,8 +821,7 @@ void TriangulationMesh::TriangulateMesh(const char *pts_file_name, Triangulation
 
     _are_stats_dirty = true;
 
-    if(method == Triangulate_Delaunay)
-        TriangulateDelaunay();
+    RecalculateMesh(method);
 }
 
 void TriangulationMesh::RecalculateMesh(Triangulate_Method method) {
@@ -831,15 +835,23 @@ void TriangulationMesh::RecalculateMesh(Triangulate_Method method) {
 
         TriangulateDelaunay();
     }
-    else if(method == Triangulate_EdgeFlip)
-        TriangulateEdgeFlip();
+    else if(method == Triangulate_DelaunayWeighted) {
+        bb = pc.GetBoundingBox(3);
+        TriangulateWeighted();
+    }
+}
+
+template<typename Ty>
+Ty lerp(Ty a, Ty b, float f)
+{
+    return a * (1.0 - f) + (b * f);
 }
 
 // [< O(n^3)]
 void TriangulationMesh::TriangulateDelaunay() {
     // [O(n)]
     for(int i = 0; i < pc.points.size(); i++) {
-        Vec2 p = pc.points[i];
+        Vec2& p = pc.points[i];
 
         std::unordered_set<int> bad_tris;
 
@@ -957,12 +969,14 @@ MeshStats TriangulationMesh::GetMeshStats() {
     if(!_are_stats_dirty || elements.empty())
         return _mesh_stats;
 
-    _mesh_stats.triangle_ratings.clear();
+    //_mesh_stats.triangle_ratings.clear();
+    _mesh_stats.triangle_ratings.resize(elements.size());
     _mesh_stats.rating_buckets = std::vector<float>(_mesh_stats.buckets, 0);
     double rating_sum = 0;
 
     // Recalculate mesh stats
-    for(auto& tri : elements) {
+    for(int idx = 0; idx < elements.size(); idx++) {
+        auto& tri = elements[idx];
         float longest_side = 0;
         float shortest_side = FLT_MAX;
 
@@ -970,13 +984,19 @@ MeshStats TriangulationMesh::GetMeshStats() {
         float rating = 0;
         for(int i = 0; i < 3; i++) {
             float dst = pc.points[tri.points[i]].dist(pc.points[tri.points[(i + 1) % 3]]);
-            if(dst > longest_side) {
-                rating -= longest_side;
-                longest_side = dst;
-            }
+            //if(dst > longest_side) {
+            //    rating -= longest_side;
+            //    longest_side = dst;
+            //}
             shortest_side = fmin(shortest_side, dst);
-            rating += dst;
+            longest_side = fmax(longest_side, dst);
+            //rating += dst;
         }
+
+        //float d1, d2, d3;
+        //d1 = pc.points[tri.points[0]].dist(pc.points[tri.points[1]]);
+        //d2 = pc.points[tri.points[1]].dist(pc.points[tri.points[2]]);
+        //d3 = pc.points[tri.points[2]].dist(pc.points[tri.points[0]]);
 
         rating = shortest_side / longest_side;
 
@@ -984,15 +1004,19 @@ MeshStats TriangulationMesh::GetMeshStats() {
         _mesh_stats.rating_buckets[bucket_idx]++;
         rating_sum += rating;
 
-        _mesh_stats.triangle_ratings.push_back(rating);
+        //printf("Rating = %.2f (%.2f, %.2f, %.2f)\n", rating, d1, d2, d3);
+
+        //_mesh_stats.triangle_ratings.push_back(rating);
+        _mesh_stats.triangle_ratings[idx] = rating;
     }
 
     // Use for relative data
     //for(auto& r : _mesh_stats.rating_buckets)
     //    r /= elements.size();
 
-    std::sort(_mesh_stats.triangle_ratings.begin(), _mesh_stats.triangle_ratings.end());
-    _mesh_stats.median_triangle_rating = _mesh_stats.triangle_ratings[elements.size()/2];
+    std::vector<float> ratings(_mesh_stats.triangle_ratings);
+    std::sort(ratings.begin(), ratings.end());
+    _mesh_stats.median_triangle_rating = ratings[elements.size()/2];
     _mesh_stats.mean_triangle_rating = rating_sum / elements.size();
     _mesh_stats.min_triangle_rating = _mesh_stats.triangle_ratings[0];
     _mesh_stats.max_triangle_rating = _mesh_stats.triangle_ratings[_mesh_stats.triangle_ratings.size()-1];
@@ -1001,8 +1025,70 @@ MeshStats TriangulationMesh::GetMeshStats() {
 
     return _mesh_stats;
 }
+void TriangulationMesh::TriangulateWeighted() {
 
+    // Do the triangulation
+    RecalculateMesh(Triangulate_Delaunay);
 
-void TriangulationMesh::TriangulateEdgeFlip() {
+    std::map<std::pair<int, int>, int> map;
 
+    for(int elem_idx = 0; elem_idx < elements.size(); elem_idx++) {
+        int last_idx = elements[elem_idx].points[2];
+        for(int e_idx : elements[elem_idx].points) {
+            ++map[std::pair<int, int>(std::min(last_idx, e_idx), std::max(last_idx, e_idx))];
+
+            last_idx = e_idx;
+        }
+    }
+
+    // Find edges points part of the outline (front)
+    std::unordered_set<int> front;
+    for(auto& m : map) {
+        if(m.second == 1)
+            front.insert({m.first.first, m.first.second});
+    }
+
+    const auto n = pc.points.size();
+    const float density = n / sqrtf(bb.GetArea());
+    const float min_dist = 5.f / density;
+
+    // "Relax" mesh with laplace smoothing
+    for(int i = 3; i < n; i++) {
+        if(front.find(i) != front.end()) continue;
+
+        Vec2& p = pc.points[i];
+
+        // retry with a new bounding box
+        if(!bb.IsPointInside(p)) {
+            bb = pc.GetBoundingBox();
+            TriangulateWeighted();
+            return;
+        }
+
+        std::vector<int> connected_points;
+
+        for(auto& elem : elements) {
+            if(elem.Contains(i)) {
+                for(int e : elem.points)
+                    if(e != i)
+                    connected_points.push_back(e);
+            }
+        }
+
+        if(!connected_points.empty()) {
+            float distance_sum = 0;
+            Vec2 mid_point = {0, 0};
+            for (int cp: connected_points) {
+                float dist = p.dist(pc.points[cp]) - (use_distance ? min_dist : 0);
+                if(use_distance)
+                    distance_sum += dist;
+                mid_point += pc.points[cp] * (use_distance ? dist : 1);
+            }
+            mid_point = mid_point / (use_distance ? distance_sum : connected_points.size());
+            p = mid_point;// - (global_vec / n * 10);//lerp(p, mid_point, 1);
+        }
+    }
+
+    GetMeshStats();
+    _are_stats_dirty = true;
 }
