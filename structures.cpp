@@ -600,7 +600,7 @@ bool ccw(Vec2 A, Vec2  B, Vec2 C) {
 
 // Check if line segment AB intersects line segment CD
 bool intersect(Vec2 A, Vec2  B, Vec2 C, Vec2 D) {
-    return ccw(A, C, D) != ccw(B, C, D) and ccw(A, B, C) != ccw(A, B, D);
+    return ccw(A, C, D) != ccw(B, C, D) && ccw(A, B, C) != ccw(A, B, D);
 }
 
 // line AB
@@ -667,14 +667,14 @@ bool TriangleMesh::_IsLineOccupied(int pi, int idx) {
     int mod_n_1 = poly.edges.size() - 1;
 
     // These 2 variables denote (A and p) or (B and p) are part of the outline (front)
-    bool is_A_on_front = edges[idx].start < poly.edges.size() and pi < poly.edges.size() and
+    bool is_A_on_front = edges[idx].start < poly.edges.size() && pi < poly.edges.size() &&
             (abs(edges[idx].start - pi) == 1 || abs(edges[idx].start - pi) == mod_n_1);
     if(is_A_on_front)
         is_A_on_front &= std::any_of(poly.edges.begin(), poly.edges.end(), [&](const Edge &e) {
             return (e.start == edges[idx].start && e.end == pi) || (e.start == pi && e.end == edges[idx].start);
         });
 
-    bool is_B_on_front = edges[idx].end < poly.edges.size() and pi < poly.edges.size() and
+    bool is_B_on_front = edges[idx].end < poly.edges.size() && pi < poly.edges.size() &&
             (abs(edges[idx].end - pi) == 1 || abs(edges[idx].end - pi) == mod_n_1);
     if(is_B_on_front)
         is_B_on_front &= std::any_of(poly.edges.begin(), poly.edges.end(), [&](const Edge &e) {
@@ -686,9 +686,9 @@ bool TriangleMesh::_IsLineOccupied(int pi, int idx) {
     for(int i = 0; i < elements.size(); i++) {
         auto& e = elements[i];
 
-        if(e.Contains(edges[idx].start) and e.Contains(pi))
+        if(e.Contains(edges[idx].start) && e.Contains(pi))
             tri_count_A += is_A_on_front ? 2 : 1;
-        if(e.Contains(edges[idx].end) and e.Contains(pi))
+        if(e.Contains(edges[idx].end) && e.Contains(pi))
             tri_count_B += is_B_on_front ? 2 : 1;
 
         // Check if the entire triangle is a duplicate of some other already existing triangle

@@ -205,8 +205,7 @@ struct PointCloud {
 
     Rect GetBoundingBox(int starting_idx = 0);
 
-    PointCloud(const char* src_file, float scale = 1, Vec2 offset = {0, 0}) {
-        PointCloud(src_file, {scale, scale}, offset);
+    PointCloud(const char* src_file, float scale = 1, Vec2 offset = {0, 0}) : PointCloud(src_file, {scale, scale}, offset) {
     }
 
     PointCloud(const char* src_file, Vec2 scale = {1, 1}, Vec2 offset = {0, 0},

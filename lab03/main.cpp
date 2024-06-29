@@ -267,7 +267,7 @@ int OnGui()
                     dragging_point = &triangle.vtx[2];
 
                 if(ImGui::DrawPoint(ImGui::Local2Canvas(P1, avail, startPos),
-                                    "P", dl, POINT_BASE_RADIUS, POINT_SPECIAL_COLOR) &&
+                                    "P", dl, POINT_BASE_RADIUS, is_inside ? POINT_SPECIAL_COLOR : POINT_BASE_COLOR) &&
                    ImGui::IsMouseClicked(0))
                     dragging_point = &P1;
 

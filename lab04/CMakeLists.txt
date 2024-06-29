@@ -15,7 +15,8 @@ add_executable(${PROJECT_NAME}
         ../External/ImGui/imgui_impl_glfw.cpp
         ../gui/gui.cpp
         ../gui/ImGuiExtensions.cpp
-        ../Helpers.cpp)
+        ../Helpers.cpp
+        ../structures.cpp)
 
 target_link_directories(${PROJECT_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/../Dependencies/GLFW/lib-vc2022)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/../Dependencies/GLFW/Include)

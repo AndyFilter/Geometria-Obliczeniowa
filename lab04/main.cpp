@@ -142,7 +142,7 @@ int OnGui()
                     Vec2 pos = ImGui::Local2Canvas(point, avail, startPos);
                     dl->AddCircleFilled(pos, POINT_CLOUD_BASE_RADIUS,
                                         point.include_in_hull ? POINT_SPECIAL_COLOR : POINT_BASE_COLOR);
-                    dl->AddLine(pos, last_pos, LINE_BASE_COLOR, 1);
+                    //dl->AddLine(pos, last_pos, LINE_BASE_COLOR, 1);
                     last_pos = pos;
                 }
 
@@ -358,8 +358,8 @@ int main() {
         obj.obj = craft_pc;
         obj.bb = bb;
         while (file >> obj.start_pos && file >> obj.velocity) {
-            obj.start_pos = obj.start_pos * ZAD2_SCALE_FACTOR + ZAD2_OFFSET; // transform to local coordinates
-            obj.velocity = obj.velocity * ZAD2_SCALE_FACTOR; // transform to local coordinates
+            obj.start_pos = obj.start_pos * ZAD2_SCALE_FACTOR * 10 + ZAD2_OFFSET; // transform to local coordinates
+            obj.velocity = obj.velocity * ZAD2_SCALE_FACTOR  * 10; // transform to local coordinates
             crafts[i-1] = obj;
         }
     }

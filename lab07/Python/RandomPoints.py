@@ -1,7 +1,7 @@
 import random
 import collections
 
-N = 100
+N = 500
 OUT_FILE = "../points.dat"
 OUT_DATA = []
 BOUNDS = (1000, 1000)
